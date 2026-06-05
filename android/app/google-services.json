@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "841753792573",
+    "project_id": "arasan-mobiles-in",
+    "storage_bucket": "arasan-mobiles-in.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:841753792573:android:bc93381964772c6d6b5a54",
+        "android_client_info": {
+          "package_name": "com.arasanmobiles.arasan_user"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "841753792573-q6hs8dpj7he340en1ftndp0bg7pmjpoc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAamLnOVJuI7Ap7C6aAmMCuWwdFkpWXLps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "841753792573-q6hs8dpj7he340en1ftndp0bg7pmjpoc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
