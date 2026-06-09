@@ -82,6 +82,7 @@ class HomepageProvider extends ChangeNotifier {
           filterValue: s.config['filter_value'] as String?,
           productIds: s.productIds,
           displayOrder: s.displayOrder,
+          products: s.products, // backend-resolved products for this section
         )).toList(),
         banners: supabaseConfig.banners.map((b) => homepage_models.BannerData(
           id: b.id,

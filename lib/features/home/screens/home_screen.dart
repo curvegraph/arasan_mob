@@ -211,6 +211,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
           break;
         case 'category_grid':
+        case 'category_slider':
           slivers.add(SliverToBoxAdapter(
             child: RepaintBoundary(
               child: CategoriesSection(
@@ -229,12 +230,14 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 sectionKey: section.key,
                 title: section.title,
                 config: section.config,
+                initialProducts: section.products,
               ),
             ),
           ));
           slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
           break;
         case 'brand_grid':
+        case 'brand_slider':
           slivers.add(SliverToBoxAdapter(
             child: RepaintBoundary(
               child: BrandsSection(
@@ -254,6 +257,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 sectionKey: section.key,
                 title: section.title,
                 config: section.config,
+                initialProducts: section.products,
               ),
             ),
           ));
@@ -264,13 +268,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         case 'new_arrivals':
         case 'best_sellers':
         case 'on_sale':
-          // Use ValueKey to ensure uniqueness
+          // Use ValueKey to ensure uniqueness. Render the backend-resolved
+          // products directly (admin-driven); paginated grids keep fetching.
           slivers.add(SliverProductsGridSection(
             key: ValueKey('product_grid_${section.key}_${section.type}'),
             sectionKey: section.key,
             sectionType: section.type,
             title: section.title,
             config: section.config,
+            initialProducts: section.products,
           ));
           break;
         case 'recently_viewed':
@@ -278,6 +284,27 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             child: const RepaintBoundary(child: RecentlyViewedSection()),
           ));
           slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
+          break;
+        case 'today_offers':
+          // "Today's Offers" — render as its own styled deal band (like Flash /
+          // Daily Deals). Dedupe by product id so a product offered in multiple
+          // variants doesn't appear twice.
+          final seenOffer = <String>{};
+          final offerProducts =
+              section.products.where((p) => seenOffer.add(p.id)).toList();
+          if (offerProducts.isNotEmpty) {
+            slivers.add(SliverToBoxAdapter(
+              child: RepaintBoundary(
+                child: DealsSection(
+                  sectionKey: section.key,
+                  title: section.title,
+                  config: section.config,
+                  initialProducts: offerProducts,
+                ),
+              ),
+            ));
+            slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
+          }
           break;
         default:
           continue;

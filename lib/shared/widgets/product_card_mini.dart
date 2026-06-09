@@ -6,6 +6,7 @@ import '../../core/utils/currency_formatter.dart';
 import '../../data/models/product.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/wishlist_provider.dart';
+import 'animated_product_image.dart';
 import 'auth_gate.dart';
 import 'image_placeholder.dart';
 
@@ -45,11 +46,6 @@ class _ProductCardMiniState extends State<ProductCardMini> {
     if (o == null || p <= 0 || o >= p) return 0;
     final pct = ((p - o) / p * 100).round();
     return pct;
-  }
-
-  double get _savings {
-    if (_discountPercent == 0) return 0;
-    return widget.product.price - widget.product.effectivePrice;
   }
 
   Future<void> _toggleWishlist() async {
@@ -146,30 +142,28 @@ class _ProductCardMiniState extends State<ProductCardMini> {
                   children: [
                     if (p.brand.isNotEmpty || hasRating) _buildBrandRow(p, hasRating),
                     const SizedBox(height: 4),
-                    Text(
-                      p.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A1A1A),
-                        height: 1.2,
-                        letterSpacing: -0.1,
+                    // Always reserve two lines so the price row and the Add/Buy
+                    // bar line up across every card, no matter the name length.
+                    SizedBox(
+                      height: 34,
+                      child: Text(
+                        p.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1A1A1A),
+                          height: 1.25,
+                          letterSpacing: -0.1,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 6),
                     _buildPriceRow(p, discount),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 18,
-                      child: _savings > 0
-                          ? Align(
-                              alignment: Alignment.centerLeft,
-                              child: _buildSavingsPill(),
-                            )
-                          : null,
-                    ),
+                    // No savings row here — the discount is already shown as the
+                    // badge on the image, so there's no empty space between the
+                    // price and the Add/Buy buttons.
                     const SizedBox(height: 8),
                     _buildCTABar(outOfStock, isWishlisted),
                   ],
@@ -208,11 +202,22 @@ class _ProductCardMiniState extends State<ProductCardMini> {
                     curve: Curves.easeOut,
                     scale: _hoverIndex == i ? 1.05 : 1.0,
                     child: SizedBox.expand(
-                      child: ImagePlaceholder(
-                        imageUrl: images[i],
-                        icon: Icons.phone_android,
-                        fit: BoxFit.cover,
-                      ),
+                      // Primary image plays the product's admin-set animation
+                      // (bounce/pulse/zoom/...). Hover-swap images stay static.
+                      child: i == 0
+                          ? AnimatedProductImage(
+                              animation: widget.product.imageAnimation,
+                              child: ImagePlaceholder(
+                                imageUrl: images[i],
+                                icon: Icons.phone_android,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : ImagePlaceholder(
+                              imageUrl: images[i],
+                              icon: Icons.phone_android,
+                              fit: BoxFit.cover,
+                            ),
                     ),
                   ),
                 )
@@ -445,24 +450,6 @@ class _ProductCardMiniState extends State<ProductCardMini> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildSavingsPill() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: _success.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        '↓ ${CurrencyFormatter.format(_savings)} saved',
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          color: _success,
-        ),
-      ),
     );
   }
 

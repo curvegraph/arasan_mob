@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../data/models/product.dart';
 import '../../../data/services/product_service.dart';
 import '../../../providers/homepage_provider.dart';
+import '../../../shared/widgets/animated_product_image.dart';
 
 /// Flash Deals section — gradient background, countdown timer, auto-scrolling carousel.
 /// Fetches only the deal products it needs (not the full catalog).
@@ -14,11 +15,16 @@ class DealsSection extends StatefulWidget {
   final String? title;
   final Map<String, dynamic>? config;
 
+  /// Backend-resolved deal products. When supplied they're rendered directly
+  /// (mirrors the admin config); otherwise the section falls back to fetching.
+  final List<Product>? initialProducts;
+
   const DealsSection({
     super.key,
     this.sectionKey = 'flash_deals',
     this.title,
     this.config,
+    this.initialProducts,
   });
 
   @override
@@ -42,20 +48,41 @@ class _DealsSectionState extends State<DealsSection> {
   DateTime? _endTime;
   bool _showTimer = false;
 
+  bool get _useEmbedded => widget.initialProducts != null;
+
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _parseTimerConfig();
     _startCountdown();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadDealProducts();
-    });
 
-    // Polling-based refresh (Socket.IO bridge will replace this).
-    _productsPollTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (mounted) _loadDealProducts();
-    });
+    if (_useEmbedded) {
+      // Render the backend-resolved products directly — no fetch/poll needed;
+      // the homepage provider refresh feeds updates via didUpdateWidget.
+      _dealsProducts = List.of(widget.initialProducts!);
+      _isLoadingProducts = false;
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadDealProducts();
+      });
+      // Polling-based refresh (Socket.IO bridge will replace this).
+      _productsPollTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+        if (mounted) _loadDealProducts();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DealsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_useEmbedded &&
+        !identical(widget.initialProducts, oldWidget.initialProducts)) {
+      setState(() {
+        _dealsProducts = List.of(widget.initialProducts!);
+        _isLoadingProducts = false;
+      });
+    }
   }
 
   void _parseTimerConfig() {
@@ -182,9 +209,16 @@ class _DealsSectionState extends State<DealsSection> {
     final homepageProvider = context.read<HomepageProvider>();
     final flashDeal = homepageProvider.flashDeal;
     final section = homepageProvider.getSectionByKey(widget.sectionKey);
+    final isToday = section?.type == 'today_offers';
     final isDaily = section?.type == 'daily_deals';
-    final defaultTitle = isDaily ? 'Daily Deals' : 'Flash Deals';
-    final title = flashDeal?.title ?? section?.title ?? defaultTitle;
+    final defaultTitle =
+        isToday ? "Today's Offers" : isDaily ? 'Daily Deals' : 'Flash Deals';
+    // Today's Offers is admin-curated, not a flash deal — don't borrow the
+    // flash-deal title/timer for it.
+    final title =
+        (isToday ? section?.title : (flashDeal?.title ?? section?.title)) ??
+            defaultTitle;
+    final showTimer = !isToday;
 
     if (_isLoadingProducts || _dealsProducts.isEmpty) {
       return const SizedBox.shrink();
@@ -192,18 +226,24 @@ class _DealsSectionState extends State<DealsSection> {
 
     debugPrint('[DealsSection] ${widget.sectionKey}: Building with ${_dealsProducts.length} products');
 
-    final bandColor = isDaily ? const Color(0xFF2962FF) : const Color(0xFFF0593F);
+    final bandColor = isToday
+        ? const Color(0xFF7C3AED) // purple for Today's Offers
+        : isDaily
+            ? const Color(0xFF2962FF)
+            : const Color(0xFFF0593F);
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 768;
-    final cardWidth = isWide ? 170.0 : 130.0;
+    // Smaller deal cards on mobile so the band takes less vertical space.
+    final cardWidth = isWide ? 160.0 : 96.0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      margin: EdgeInsets.symmetric(horizontal: 12, vertical: isWide ? 4 : 3),
       decoration: BoxDecoration(
         color: bandColor,
         borderRadius: BorderRadius.circular(16),
       ),
-      padding: EdgeInsets.fromLTRB(isWide ? 20 : 16, 14, isWide ? 20 : 16, 18),
+      padding: EdgeInsets.fromLTRB(
+          isWide ? 20 : 14, isWide ? 14 : 10, isWide ? 20 : 14, isWide ? 18 : 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -213,23 +253,24 @@ class _DealsSectionState extends State<DealsSection> {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: isWide ? 20 : 18,
+                    fontSize: isWide ? 20 : 16,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     letterSpacing: -0.3,
                   ),
                 ),
               ),
-              ValueListenableBuilder<Duration>(
-                valueListenable: _timeLeftNotifier,
-                builder: (context, timeLeft, _) {
-                  if (timeLeft.inSeconds <= 0) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _TimerBadge(timeLeft: timeLeft),
-                  );
-                },
-              ),
+              if (showTimer)
+                ValueListenableBuilder<Duration>(
+                  valueListenable: _timeLeftNotifier,
+                  builder: (context, timeLeft, _) {
+                    if (timeLeft.inSeconds <= 0) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _TimerBadge(timeLeft: timeLeft),
+                    );
+                  },
+                ),
               GestureDetector(
                 onTap: () => context.push('/shop/offers'),
                 child: Container(
@@ -244,9 +285,9 @@ class _DealsSectionState extends State<DealsSection> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: isWide ? 12 : 8),
           SizedBox(
-            height: cardWidth + 70,
+            height: cardWidth + (isWide ? 64 : 52),
             child: ListView.separated(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
@@ -307,7 +348,9 @@ class _DealProductCardState extends State<_DealProductCard> {
                     Container(
                       color: const Color(0xFFF1F5F9),
                       child: p.imageUrl.isNotEmpty
-                          ? AnimatedScale(
+                          ? AnimatedProductImage(
+                              animation: p.imageAnimation,
+                              child: AnimatedScale(
                               scale: _hovered ? 1.05 : 1.0,
                               duration: const Duration(milliseconds: 500),
                               curve: Curves.easeOut,
@@ -322,6 +365,7 @@ class _DealProductCardState extends State<_DealProductCard> {
                                   child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
                                 ),
                               ),
+                            ),
                             )
                           : const Center(
                               child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),

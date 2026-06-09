@@ -709,10 +709,13 @@ class _BrandTrustPillState extends State<_BrandTrustPill> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
           transform: Matrix4.identity()..translate(0.0, _hovered ? -2.0 : 0.0),
-          padding: const EdgeInsets.fromLTRB(8, 8, 18, 8),
+          width: 56,
+          height: 56,
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(999),
+            // Square box (rounded corners) instead of the old rounded pill.
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: const Color(0xFF7DD3FC)),
             boxShadow: [
               BoxShadow(
@@ -724,51 +727,41 @@ class _BrandTrustPillState extends State<_BrandTrustPill> {
               ),
             ],
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF16A34A), Color(0xFF10B981)],
-                  ),
-                ),
-                child: const Icon(Icons.check, color: Colors.white, size: 13),
-              ),
-              const SizedBox(width: 8),
-              if (hasLogo)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 22, maxWidth: 64),
-                  child: CachedNetworkImage(
+          // Brand logo (or name fallback) centred inside the square box.
+          child: Center(
+            child: hasLogo
+                ? CachedNetworkImage(
                     imageUrl: widget.brand.logoUrl!,
                     fit: BoxFit.contain,
-                    errorWidget: (_, __, ___) => Text(
-                      widget.brand.name,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                  ),
-                )
-              else
-                Text(
-                  widget.brand.name,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF1A1A1A),
-                    letterSpacing: -0.1,
-                  ),
-                ),
-            ],
+                    errorWidget: (_, __, ___) => _PillBrandName(name: widget.brand.name),
+                  )
+                : _PillBrandName(name: widget.brand.name),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Brand name fitted inside the square pill box (logo fallback)
+class _PillBrandName extends StatelessWidget {
+  final String name;
+  const _PillBrandName({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(
+        name,
+        textAlign: TextAlign.center,
+        maxLines: 2,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF1A1A1A),
+          letterSpacing: -0.1,
+          height: 1.05,
         ),
       ),
     );

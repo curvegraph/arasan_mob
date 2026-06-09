@@ -14,12 +14,19 @@ class SliverProductsGridSection extends StatefulWidget {
   final String? title;
   final Map<String, dynamic>? config;
 
+  /// Backend-resolved products for this section. When supplied (and the
+  /// section isn't a paginated "show all" grid) these are rendered directly,
+  /// so the mobile UI mirrors exactly what the admin configured — no Dart-side
+  /// re-derivation. Null means "fall back to fetching".
+  final List<Product>? initialProducts;
+
   const SliverProductsGridSection({
     super.key,
     required this.sectionKey,
     required this.sectionType,
     this.title,
     this.config,
+    this.initialProducts,
   });
 
   @override
@@ -38,11 +45,38 @@ class SliverProductsGridSectionState extends State<SliverProductsGridSection> {
   String? _error;
   Timer? _pollTimer;
 
+  /// Render the embedded products as-is when the admin didn't ask for a
+  /// paginated "show all" list. Paginated grids keep fetching so a large
+  /// catalog stays fully browseable via infinite scroll.
+  bool get _useEmbedded =>
+      widget.initialProducts != null && widget.config?['show_pagination'] != true;
+
   @override
   void initState() {
     super.initState();
-    _loadInitialProducts();
-    _subscribeToProductChanges();
+    if (_useEmbedded) {
+      _products = List.of(widget.initialProducts!);
+      _isLoading = false;
+      _hasMore = false;
+    } else {
+      _loadInitialProducts();
+      _subscribeToProductChanges();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant SliverProductsGridSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // When the provider refreshes, a new resolved product list arrives — adopt
+    // it so admin edits show up without a manual reload.
+    if (_useEmbedded &&
+        !identical(widget.initialProducts, oldWidget.initialProducts)) {
+      setState(() {
+        _products = List.of(widget.initialProducts!);
+        _isLoading = false;
+        _hasMore = false;
+      });
+    }
   }
 
   void _subscribeToProductChanges() {
@@ -127,6 +161,13 @@ class SliverProductsGridSectionState extends State<SliverProductsGridSection> {
     List<String>? productIds;
     if (selectedProductIds is List && selectedProductIds.isNotEmpty) {
       productIds = selectedProductIds.map((e) => e.toString()).toList();
+    }
+
+    // A "manual" section with no products selected must render nothing.
+    // Otherwise it falls through to the generic "all products" query below
+    // and shows the exact same list as the Product Grid (products appear twice).
+    if (productSource == 'manual' && (productIds == null || productIds.isEmpty)) {
+      return [];
     }
 
     // Verbose per-section fetch logging — only enable when diagnosing
@@ -245,7 +286,7 @@ class SliverProductsGridSectionState extends State<SliverProductsGridSection> {
   double _getChildAspectRatio(int crossAxisCount) {
     if (crossAxisCount >= 4) return 0.58;
     if (crossAxisCount == 3) return 0.55;
-    return 0.50;
+    return 0.55;
   }
 
   /// Shimmer skeleton grid shown while products are loading
@@ -458,6 +499,13 @@ class ProductsGridSectionState extends State<ProductsGridSection> {
       productIds = selectedProductIds.map((e) => e.toString()).toList();
     }
 
+    // A "manual" section with no products selected must render nothing
+    // (instead of falling back to the "all products" query, which duplicates
+    // whatever the generic Product Grid already shows).
+    if (productSource == 'manual' && (productIds == null || productIds.isEmpty)) {
+      return [];
+    }
+
     // If manual selection with product IDs, fetch those specific products
     if (productIds != null && productIds.isNotEmpty) {
       if (page == 0) {
@@ -557,7 +605,7 @@ class ProductsGridSectionState extends State<ProductsGridSection> {
   double _getChildAspectRatio(int crossAxisCount) {
     if (crossAxisCount >= 4) return 0.58;
     if (crossAxisCount == 3) return 0.55;
-    return 0.50;
+    return 0.55;
   }
 
   /// Shimmer skeleton grid shown while products are loading

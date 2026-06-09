@@ -1,3 +1,5 @@
+import 'product.dart';
+
 /// Homepage configuration loaded from Supabase
 class HomepageConfig {
   final List<HomepageSection> sections;
@@ -61,6 +63,14 @@ class HomepageSection {
   final List<String> productIds;
   final int displayOrder;
 
+  /// Products resolved server-side by the backend for this section, honoring
+  /// every admin convention (curated ids, `product_source`, deal filters,
+  /// `today_offers` items, manual-empty → empty). The mobile UI renders these
+  /// directly so it stays a faithful mirror of the admin config — the same
+  /// data the web storefront is driven by. Empty when the section carries no
+  /// products (or isn't a product-bearing section).
+  final List<Product> products;
+
   HomepageSection({
     required this.id,
     required this.key,
@@ -72,6 +82,7 @@ class HomepageSection {
     this.filterValue,
     required this.productIds,
     this.displayOrder = 0,
+    this.products = const [],
   });
 
   factory HomepageSection.fromJson(Map<String, dynamic> json) {
@@ -120,7 +131,25 @@ class HomepageSection {
               .toList() ??
           [],
       displayOrder: json['display_order'] ?? 0,
+      products: _parseProducts(json['products']),
     );
+  }
+
+  /// Parse the backend-resolved product rows defensively — one malformed row
+  /// must not blow up the whole section (which would blank the homepage).
+  static List<Product> _parseProducts(dynamic raw) {
+    if (raw is! List) return const [];
+    final out = <Product>[];
+    for (final e in raw) {
+      if (e is Map) {
+        try {
+          out.add(Product.fromJson(Map<String, dynamic>.from(e)));
+        } catch (_) {
+          // Skip rows the model can't parse rather than failing the section.
+        }
+      }
+    }
+    return out;
   }
 
   // Config helpers

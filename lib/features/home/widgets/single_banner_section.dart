@@ -55,23 +55,13 @@ class SingleBannerSection extends StatelessWidget {
     return GestureDetector(
       onTap: () => _handleTap(context, clickAction, clickValue),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        // Full-width, edge-to-edge banner (no side margin / rounded corners).
+        margin: const EdgeInsets.symmetric(vertical: 8),
         // Hero banner is cropped to 3:1 in the admin tool; render at the same
         // ratio so BoxFit.cover doesn't trim what the admin chose to show.
         child: AspectRatio(
           aspectRatio: 3 / 1,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
+          child: SizedBox(
             child: CachedNetworkImage(
               imageUrl: imageUrl,
               fit: BoxFit.cover,
