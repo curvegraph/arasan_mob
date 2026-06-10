@@ -564,9 +564,15 @@ class ProductProvider extends ChangeNotifier {
 
   /// Get product by ID from Supabase (async version)
   Future<Product?> fetchProductById(String id) async {
-    // Check if we have a full product (with description/specs) cached
+    // Check if we have a full product (with description/specs AND variants)
+    // cached. Variants only come from the detail endpoint, so re-fetch when
+    // they're missing even if a lightweight listing copy had a description.
     final cached = getProductById(id);
-    if (cached != null && cached.description.isNotEmpty) return cached;
+    if (cached != null &&
+        cached.description.isNotEmpty &&
+        cached.variants.isNotEmpty) {
+      return cached;
+    }
 
     // Always fetch full product for detail page (listing cache is lightweight)
     try {

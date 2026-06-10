@@ -38,6 +38,77 @@ extension ImageAnimationExtension on ImageAnimation {
   }
 }
 
+/// A purchasable variant of a product (a specific colour + storage/RAM combo).
+/// Parsed from the product-detail endpoint's `variants[]` (each carries a
+/// `variant_data` blob with colour/price/specs/images and a top-level stock).
+class ProductVariant {
+  final String id;
+  final String? color;
+  final double price;
+  final double? offerPrice;
+  final double? offerDiscountPercent;
+  final List<String> imageUrls;
+  final int stock;
+  final Map<String, String> specs;
+
+  ProductVariant({
+    required this.id,
+    this.color,
+    required this.price,
+    this.offerPrice,
+    this.offerDiscountPercent,
+    this.imageUrls = const [],
+    this.stock = 0,
+    this.specs = const {},
+  });
+
+  String get ram => specs['ram'] ?? '';
+  String get storage => specs['storage'] ?? '';
+
+  /// Short label like "128GB + 16GB RAM" (falls back to colour).
+  String get label {
+    final parts = <String>[];
+    if (storage.isNotEmpty) parts.add(storage);
+    if (ram.isNotEmpty) parts.add('$ram RAM');
+    if (parts.isNotEmpty) return parts.join(' + ');
+    return color ?? 'Variant';
+  }
+
+  double get effectivePrice => offerPrice ?? price;
+  String get imageUrl => imageUrls.isNotEmpty ? imageUrls.first : '';
+  bool get isOutOfStock => stock <= 0;
+
+  double get discountPercent {
+    if (offerDiscountPercent != null && offerDiscountPercent! > 0) {
+      return offerDiscountPercent!;
+    }
+    if (offerPrice != null && price > 0 && offerPrice! < price) {
+      return ((price - offerPrice!) / price * 100).round().toDouble();
+    }
+    return 0;
+  }
+
+  factory ProductVariant.fromJson(Map<String, dynamic> json) {
+    final vd = (json['variant_data'] is Map)
+        ? Map<String, dynamic>.from(json['variant_data'] as Map)
+        : <String, dynamic>{};
+    final specs = (vd['specs'] is Map)
+        ? (vd['specs'] as Map)
+            .map((k, v) => MapEntry(k.toString(), v.toString()))
+        : <String, String>{};
+    return ProductVariant(
+      id: json['id']?.toString() ?? '',
+      color: vd['color']?.toString(),
+      price: (vd['price'] as num?)?.toDouble() ?? 0,
+      offerPrice: (vd['offer_price'] as num?)?.toDouble(),
+      offerDiscountPercent: (vd['offer_discount_percent'] as num?)?.toDouble(),
+      imageUrls: (vd['image_urls'] as List<dynamic>?)?.cast<String>() ?? const [],
+      stock: (json['stock'] as num?)?.toInt() ?? 0,
+      specs: specs,
+    );
+  }
+}
+
 class Product {
   final String id;
   final String name;
@@ -64,6 +135,18 @@ class Product {
   /// when a max-discount cap clamps the effective discount, the rupee saving
   /// no longer matches the advertised percent.
   final double? offerDiscountPercent;
+  /// When the admin curates a section by *variant* (e.g. Today's Offers can list
+  /// two variants of the same product), the backend resolves that variant's
+  /// price/image into the top-level fields and tags it with this id. The same
+  /// product can therefore appear as multiple entries with distinct
+  /// [selectedVariantId]s — dedupe on this (not [id]) so a curated variant
+  /// isn't silently dropped.
+  final String? selectedVariantId;
+  /// Optional human label for the resolved variant (e.g. "128GB / Blue").
+  final String? variantLabel;
+  /// All selectable variants (colour + storage/RAM). Only populated by the
+  /// product-detail fetch; empty in lightweight list responses.
+  final List<ProductVariant> variants;
 
   Product({
     required this.id,
@@ -87,6 +170,9 @@ class Product {
     this.imageAnimation = ImageAnimation.none,
     this.badges = ProductBadgeSettings.useDefaults,
     this.offerDiscountPercent,
+    this.selectedVariantId,
+    this.variantLabel,
+    this.variants = const [],
   }) : createdAt = createdAt ?? DateTime.now();
 
   Product copyWith({
@@ -111,6 +197,9 @@ class Product {
     ImageAnimation? imageAnimation,
     ProductBadgeSettings? badges,
     double? offerDiscountPercent,
+    String? selectedVariantId,
+    String? variantLabel,
+    List<ProductVariant>? variants,
   }) {
     return Product(
       id: id ?? this.id,
@@ -134,6 +223,9 @@ class Product {
       imageAnimation: imageAnimation ?? this.imageAnimation,
       badges: badges ?? this.badges,
       offerDiscountPercent: offerDiscountPercent ?? this.offerDiscountPercent,
+      selectedVariantId: selectedVariantId ?? this.selectedVariantId,
+      variantLabel: variantLabel ?? this.variantLabel,
+      variants: variants ?? this.variants,
     );
   }
 
@@ -181,6 +273,13 @@ class Product {
       imageAnimation: ImageAnimationExtension.fromString(json['image_animation'] as String?),
       badges: ProductBadgeSettings.fromJson(json),
       offerDiscountPercent: (json['offer_discount_percent'] as num?)?.toDouble(),
+      selectedVariantId: json['selected_variant_id'] as String?,
+      variantLabel: json['variant_label'] as String?,
+      variants: (json['variants'] as List<dynamic>?)
+              ?.whereType<Map>()
+              .map((e) => ProductVariant.fromJson(Map<String, dynamic>.from(e)))
+              .toList() ??
+          const [],
     );
   }
 

@@ -32,7 +32,22 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTickerProviderStateMixin {
   int _qty = 1;
   int _selectedImageIndex = 0;
+  ProductVariant? _selectedVariant;
   late AnimationController _animationController;
+
+  // Display values that follow the currently selected variant (or the base
+  // product when none is selected).
+  List<String> _dispImages(Product p) {
+    final v = _selectedVariant;
+    if (v != null && v.imageUrls.isNotEmpty) return v.imageUrls;
+    return p.imageUrls;
+  }
+
+  double _dispPrice(Product p) => _selectedVariant?.price ?? p.price;
+  double _dispEffectivePrice(Product p) =>
+      _selectedVariant?.effectivePrice ?? p.effectivePrice;
+  int _dispDiscount(Product p) =>
+      (_selectedVariant?.discountPercent ?? p.discountPercent).toInt();
 
   @override
   void initState() {
@@ -148,10 +163,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Action icons row
-          _buildActionRow(isWishlisted, wishlist, product),
-
-          // Image carousel
+          // Image carousel — wishlist + share are overlaid on the image
+          // (top-right corner), with the discount badge top-left.
           _buildImageCarousel(images, product),
 
           // Product info
@@ -165,6 +178,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 _buildProductName(product),
                 const SizedBox(height: 8),
                 _buildRatingRow(avgRating, reviewCount, product),
+                if (product.variants.length >= 2) ...[
+                  const SizedBox(height: 16),
+                  _buildVariantSelector(product),
+                ],
                 const SizedBox(height: 12),
                 _buildPriceRow(product),
                 const SizedBox(height: 4),
@@ -270,16 +287,120 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   // IMAGE CAROUSEL (Mobile)
   // ===========================================================================
   Widget _buildImageCarousel(List<String> images, Product product) {
+    // Follow the selected variant's images when one is chosen.
+    images = _dispImages(product);
+    final Widget content;
     if (images.isEmpty) {
-      return AspectRatio(
+      content = AspectRatio(
         aspectRatio: 1,
         child: Container(
           color: AppColors.surfaceVariant,
           child: _buildProductImage(product.thumbnailUrl, animation: product.imageAnimation),
         ),
       );
+    } else {
+      content = _buildCarouselBody(images, product);
     }
+    // Overlay the wishlist + share buttons (top-right) and discount badge
+    // (top-left) directly on the image, matching the web product page.
+    return Stack(
+      children: [
+        content,
+        Positioned(top: 12, left: 12, child: _buildImageDiscountBadge(product)),
+        Positioned(top: 12, right: 12, child: _buildImageActionButtons(product)),
+      ],
+    );
+  }
 
+  Widget _buildImageDiscountBadge(Product product) {
+    final discount = _dispDiscount(product);
+    if (discount <= 0) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1400E0), Color(0xFF2962FF)],
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.flash_on, size: 14, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            '$discount% OFF',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Stacked white circular buttons on the image: wishlist on top, share below.
+  Widget _buildImageActionButtons(Product product) {
+    final isWishlisted =
+        context.watch<WishlistProvider>().isInWishlist(product.id);
+    return Column(
+      children: [
+        _circleIconButton(
+          icon: isWishlisted ? Icons.favorite : Icons.favorite_border,
+          color: isWishlisted ? AppColors.wishlistRed : const Color(0xFF64748B),
+          onTap: () => requireAuth(context, action: () async {
+            await context.read<WishlistProvider>().toggleWishlist(product.id);
+          }),
+        ),
+        const SizedBox(height: 10),
+        _circleIconButton(
+          icon: Icons.share_outlined,
+          color: const Color(0xFF64748B),
+          onTap: () {
+            final shareUrl =
+                'https://arasanmobiles.com/shop/product/${product.id}';
+            Clipboard.setData(ClipboardData(text: shareUrl));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Product link copied to clipboard'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _circleIconButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.10),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(icon, size: 20, color: color),
+      ),
+    );
+  }
+
+  Widget _buildCarouselBody(List<String> images, Product product) {
     return Column(
       children: [
         AspectRatio(
@@ -632,9 +753,122 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     );
   }
 
+  /// Compact horizontal variant picker (colour + storage/RAM). Tapping a box
+  /// swaps the main image, price and discount in place.
+  Widget _buildVariantSelector(Product product) {
+    final variants = product.variants;
+    if (variants.length < 2) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Variants',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1A1A1A),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 182,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.zero,
+            itemCount: variants.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, i) {
+              final v = variants[i];
+              final selected = _selectedVariant?.id == v.id;
+              return GestureDetector(
+                onTap: () => setState(() {
+                  _selectedVariant = selected ? null : v;
+                  _selectedImageIndex = 0;
+                }),
+                child: Container(
+                  width: 110,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF1400E0)
+                          : const Color(0xFFE2E8F0),
+                      width: selected ? 2 : 1,
+                    ),
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AspectRatio(
+                        aspectRatio: 1,
+                        child: Container(
+                          color: const Color(0xFFF8FAFC),
+                          padding: const EdgeInsets.all(6),
+                          child: v.imageUrl.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: v.imageUrl,
+                                  fit: BoxFit.contain,
+                                  errorWidget: (_, __, ___) => const Icon(
+                                      Icons.phone_android,
+                                      color: AppColors.textHint),
+                                )
+                              : const Icon(Icons.phone_android,
+                                  color: AppColors.textHint),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 5, 8, 7),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (v.color != null && v.color!.isNotEmpty)
+                              Text(
+                                v.color!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1A1A1A),
+                                ),
+                              ),
+                            Text(
+                              v.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 10, color: Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              CurrencyFormatter.format(v.effectivePrice),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1400E0),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPriceRow(Product product) {
-    final discount = product.discountPercent.toInt();
-    final savings = discount > 0 ? product.price - product.effectivePrice : 0.0;
+    final discount = _dispDiscount(product);
+    final price = _dispPrice(product);
+    final effectivePrice = _dispEffectivePrice(product);
+    final savings = discount > 0 ? price - effectivePrice : 0.0;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -656,7 +890,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
             runSpacing: 4,
             children: [
               Text(
-                CurrencyFormatter.format(product.effectivePrice),
+                CurrencyFormatter.format(effectivePrice),
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -669,7 +903,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 Padding(
                   padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
-                    CurrencyFormatter.format(product.price),
+                    CurrencyFormatter.format(price),
                     style: const TextStyle(
                       fontSize: 14,
                       color: Color(0xFFCBD5E1),
@@ -872,12 +1106,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    CurrencyFormatter.format(product.effectivePrice),
+                    CurrencyFormatter.format(_dispEffectivePrice(product)),
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                   ),
-                  if (product.hasDiscount)
+                  if (_dispDiscount(product) > 0)
                     Text(
-                      '${product.discountPercent.toStringAsFixed(0)}% off',
+                      '${_dispDiscount(product)}% off',
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.success),
                     ),
                 ],

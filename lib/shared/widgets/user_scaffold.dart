@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../providers/cart_provider.dart';
 import 'search_bar_button.dart';
 import 'user_app_bar.dart';
 import 'user_bottom_nav.dart';
@@ -51,6 +53,10 @@ class _UserScaffoldState extends State<UserScaffold> {
     final showBottomNav = isMobile && !hasOwnBottomBar;
     final showSearchBar = isMobile &&
         !UserScaffold._routesWithoutSearchBar.any((r) => path.startsWith(r));
+    // The product detail page gets a dedicated header (back + search + cart)
+    // instead of the home-style logo header. Only this page — the home page and
+    // other inner pages keep their existing headers.
+    final isProductDetail = isMobile && path.startsWith('/shop/product/');
     final isHomeTab = path == '/shop';
     final canShellPop = router.canPop();
 
@@ -87,12 +93,118 @@ class _UserScaffoldState extends State<UserScaffold> {
         backgroundColor: AppColors.background,
         body: Column(
           children: [
-            const UserAppBar(),
-            if (showSearchBar) const SearchBarButton(),
+            if (isProductDetail)
+              const _ProductDetailHeader()
+            else ...[
+              const UserAppBar(),
+              if (showSearchBar) const SearchBarButton(),
+            ],
             Expanded(child: widget.child),
           ],
         ),
         bottomNavigationBar: showBottomNav ? const UserBottomNav() : null,
+      ),
+    );
+  }
+}
+
+/// Compact header shown ONLY on the product detail page:
+/// back button (left) · tappable search bar (center) · cart (right).
+class _ProductDetailHeader extends StatelessWidget {
+  const _ProductDetailHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final cartCount = context.watch<CartProvider>().itemCount;
+    final router = GoRouter.of(context);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: 58,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              children: [
+                // Back
+                GestureDetector(
+                  onTap: () {
+                    if (router.canPop()) {
+                      router.pop();
+                    } else {
+                      router.go('/shop');
+                    }
+                  },
+                  child: const SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(Icons.arrow_back,
+                        color: Color(0xFF1A1A1A), size: 24),
+                  ),
+                ),
+                // Search (tappable → search screen)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => context.push('/shop/search'),
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.search,
+                              size: 18, color: Color(0xFF64748B)),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Search products...',
+                              style: TextStyle(
+                                  color: Color(0xFF94A3B8), fontSize: 13),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Cart
+                GestureDetector(
+                  onTap: () => context.go('/shop/cart'),
+                  child: SizedBox(
+                    width: 48,
+                    height: 44,
+                    child: Center(
+                      child: Badge(
+                        isLabelVisible: cartCount > 0,
+                        offset: const Offset(6, -6),
+                        backgroundColor: const Color(0xFFA0D911),
+                        label: Text(
+                          cartCount > 9 ? '9+' : '$cartCount',
+                          style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white),
+                        ),
+                        child: const Icon(Icons.shopping_cart_outlined,
+                            color: Color(0xFF1A1A1A), size: 24),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
