@@ -90,18 +90,22 @@ class _AnimatedProductImageState extends State<AnimatedProductImage>
           // ctrl.value sweeps 0→1→0 (repeat reverse); ease it for smoothness.
           final t = Curves.easeInOut.transform(ctrl.value);
           double dx = 0, dy = 0, scale = 1, opacity = 1;
+          // Amplitudes are deliberately small: the image area in deal/product
+          // cards is tight, so a large translate/zoom would push the product
+          // past the card edge and get clipped (looked like the product was
+          // half-hidden). These gentle values stay within the image padding.
           switch (widget.animation) {
             case ImageAnimation.bounce:
-              dy = -10 * t;
+              dy = -4 * t;
               break;
             case ImageAnimation.pulse:
-              scale = 1 + 0.05 * t;
+              scale = 1 + 0.03 * t;
               break;
             case ImageAnimation.zoomIn:
-              scale = 1 + 0.12 * t;
+              scale = 1 + 0.06 * t;
               break;
             case ImageAnimation.zoomOut:
-              scale = 1.12 - 0.12 * t;
+              scale = 1.06 - 0.06 * t;
               break;
             case ImageAnimation.fadeIn:
               opacity = 0.45 + 0.55 * t;
@@ -110,10 +114,10 @@ class _AnimatedProductImageState extends State<AnimatedProductImage>
               opacity = 1 - 0.55 * t;
               break;
             case ImageAnimation.slideLeft:
-              dx = -8 * t;
+              dx = -5 * t;
               break;
             case ImageAnimation.slideRight:
-              dx = 8 * t;
+              dx = 5 * t;
               break;
             case ImageAnimation.none:
               break;

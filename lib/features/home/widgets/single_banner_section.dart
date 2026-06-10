@@ -27,7 +27,7 @@ class SingleBannerSection extends StatelessWidget {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: AspectRatio(
-          aspectRatio: 3 / 1,
+          aspectRatio: 2 / 1,
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -57,23 +57,27 @@ class SingleBannerSection extends StatelessWidget {
       child: Container(
         // Full-width, edge-to-edge banner (no side margin / rounded corners).
         margin: const EdgeInsets.symmetric(vertical: 8),
-        // Hero banner is cropped to 3:1 in the admin tool; render at the same
-        // ratio so BoxFit.cover doesn't trim what the admin chose to show.
-        child: AspectRatio(
-          aspectRatio: 3 / 1,
-          child: SizedBox(
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              placeholder: (context, url) => Container(
+        // Big hero banner: render at FULL screen width and let the height
+        // follow the image's natural aspect ratio (BoxFit.fitWidth). This shows
+        // the whole banner (no crop) AND makes it large — no letterbox bars.
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: CachedNetworkImage(
+            imageUrl: imageUrl,
+            width: double.infinity,
+            fit: BoxFit.fitWidth,
+            placeholder: (context, url) => AspectRatio(
+              aspectRatio: 2 / 1,
+              child: Container(
                 color: AppColors.primaryLight.withOpacity(0.1),
                 child: const Center(
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-              errorWidget: (context, url, error) => Container(
+            ),
+            errorWidget: (context, url, error) => AspectRatio(
+              aspectRatio: 2 / 1,
+              child: Container(
                 color: AppColors.primaryLight.withOpacity(0.1),
                 child: const Center(
                   child: Icon(Icons.broken_image, size: 48, color: AppColors.textTertiary),

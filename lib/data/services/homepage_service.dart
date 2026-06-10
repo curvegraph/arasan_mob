@@ -38,8 +38,10 @@ class HomepageService {
     }
   }
 
-  Future<List<CategoryData>> getCategories({int limit = 8}) async {
+  Future<List<CategoryData>> getCategories({int limit = 100}) async {
     try {
+      // High limit so ALL categories load (the homepage section then decides
+      // how many to show). The old default of 8 silently dropped categories.
       final data = await _api.get('/categories/root',
           queryParams: {'limit': '$limit'});
       final list = (data is Map && data['categories'] is List)
@@ -54,9 +56,13 @@ class HomepageService {
     }
   }
 
-  Future<List<BrandData>> getBrands({int limit = 8}) async {
+  Future<List<BrandData>> getBrands({int limit = 100}) async {
     try {
-      final data = await _api.get('/homepage/brands',
+      // Use the full `/brands` catalogue (all brands, each with a logo) instead
+      // of `/homepage/brands`, which only returned a small mixed set — some
+      // entries were product-derived names with no logo, so they showed as
+      // plain text. High limit so every brand loads.
+      final data = await _api.get('/brands',
           queryParams: {'limit': '$limit'});
       final list = (data is Map && data['brands'] is List)
           ? data['brands'] as List

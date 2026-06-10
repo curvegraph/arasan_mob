@@ -25,26 +25,27 @@ class CategoriesSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final homepageProvider = context.watch<HomepageProvider>();
     final allCategories = homepageProvider.categories;
-    final maxItems = (config?['max_items'] as num?)?.toInt();
 
-    // Filter by selected categories if specified in config
+    // The admin's `selected_categories` is used for ORDERING only — many of its
+    // ids are stale and resolve to nothing, which previously hid most
+    // categories. Show EVERY category: the curated/resolved ones first, then
+    // any remaining categories, so all of them appear.
     final selectedCategoryIds = (config?['selected_categories'] as List<dynamic>?)
         ?.map((e) => e.toString())
         .toList();
 
     List<CategoryData> categories;
     if (selectedCategoryIds != null && selectedCategoryIds.isNotEmpty) {
-      // Show only selected categories in the order they were selected
       final selected = selectedCategoryIds
           .map((id) => allCategories.where((c) => c.id == id).firstOrNull)
           .whereType<CategoryData>()
           .toList();
-      categories = maxItems != null ? selected.take(maxItems).toList() : selected;
+      final selectedSet = selected.map((c) => c.id).toSet();
+      final rest =
+          allCategories.where((c) => !selectedSet.contains(c.id)).toList();
+      categories = [...selected, ...rest];
     } else {
-      // Show all categories (capped only when admin set an explicit max)
-      categories = maxItems != null
-          ? allCategories.take(maxItems).toList()
-          : allCategories;
+      categories = allCategories;
     }
 
     // Design config
@@ -113,18 +114,19 @@ class CategoriesSection extends StatelessWidget {
   Widget _buildGrid(BuildContext context, List<CategoryData> categories, int columns, String shape) {
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 768;
-    final tileWidth = isWide ? 120.0 : 56.0;
+    // Bigger tiles on mobile so the full category image is legible.
+    final tileWidth = isWide ? 120.0 : 78.0;
 
     final visible = categories.take(14).toList();
 
     if (!isWide) {
       return SizedBox(
-        height: tileWidth + 26,
+        height: tileWidth + 34,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           itemCount: visible.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
           itemBuilder: (_, i) => SizedBox(
             width: tileWidth,
             child: _CategoryItem(category: visible[i], index: i, shape: shape, compact: true),
@@ -428,7 +430,9 @@ class _CategoryItemState extends State<_CategoryItem> {
                 aspectRatio: 1,
                 child: Container(
                   decoration: BoxDecoration(
-                    shape: BoxShape.circle,
+                    // Rounded square (not a circle) so the full category image
+                    // is visible instead of being cropped to a circle.
+                    borderRadius: BorderRadius.circular(20),
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -445,14 +449,18 @@ class _CategoryItemState extends State<_CategoryItem> {
                       ),
                     ],
                   ),
-                  child: ClipOval(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
                     child: Stack(
                       children: [
                         if (hasImage)
                           Positioned.fill(
-                            child: CachedNetworkImage(
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: CachedNetworkImage(
                               imageUrl: widget.category.imageUrl!,
-                              fit: BoxFit.cover,
+                              // Whole image, no crop.
+                              fit: BoxFit.contain,
                               placeholder: (_, __) => Center(
                                 child: Icon(_getIcon(),
                                     size: widget.compact ? 18 : 28,
@@ -463,6 +471,7 @@ class _CategoryItemState extends State<_CategoryItem> {
                                     size: widget.compact ? 18 : 28,
                                     color: const Color(0xFF64748B).withOpacity(0.5)),
                               ),
+                            ),
                             ),
                           )
                         else

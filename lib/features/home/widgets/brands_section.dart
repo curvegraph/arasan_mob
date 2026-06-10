@@ -23,26 +23,25 @@ class BrandsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final homepageProvider = context.watch<HomepageProvider>();
     final allBrands = homepageProvider.brands;
-    final maxItems = (config?['max_items'] as num?)?.toInt();
 
-    // Filter by selected brands if specified in config
+    // `selected_brands` is used for ORDERING only — its ids can be stale and
+    // resolve to nothing, which hid most brands. Show EVERY brand: curated ones
+    // first, then any remaining, so all brands appear in the roaming strip.
     final selectedBrandIds = (config?['selected_brands'] as List<dynamic>?)
         ?.map((e) => e.toString())
         .toList();
 
     List<BrandData> brands;
     if (selectedBrandIds != null && selectedBrandIds.isNotEmpty) {
-      // Show only selected brands in the order they were selected
       final selected = selectedBrandIds
           .map((id) => allBrands.where((b) => b.id == id).firstOrNull)
           .whereType<BrandData>()
           .toList();
-      brands = maxItems != null ? selected.take(maxItems).toList() : selected;
+      final selectedSet = selected.map((b) => b.id).toSet();
+      final rest = allBrands.where((b) => !selectedSet.contains(b.id)).toList();
+      brands = [...selected, ...rest];
     } else {
-      // Show all brands (capped only when admin set an explicit max)
-      brands = maxItems != null
-          ? allBrands.take(maxItems).toList()
-          : allBrands;
+      brands = allBrands;
     }
 
     if (brands.isEmpty) return const SizedBox.shrink();
@@ -597,7 +596,7 @@ class _BrandTrustStageState extends State<_BrandTrustStage>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          height: 92,
+          height: 124,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -627,13 +626,20 @@ class _BrandTrustStageState extends State<_BrandTrustStage>
                           ],
                         );
 
+                        // Scroll by the width of ONE full set of brands (pill
+                        // 88 + gap 12 each) so the marquee cycles through EVERY
+                        // brand and the duplicated 2nd set makes it seamless.
+                        // (Previously it scrolled only one screen-width, so the
+                        // brands past the first screen never appeared.)
+                        final setWidth = widget.brands.length * (88.0 + 12.0);
+
                         return OverflowBox(
                           alignment: Alignment.centerLeft,
                           maxWidth: double.infinity,
                           child: Transform.translate(
-                            offset: Offset(-_ctrl.value * c.maxWidth, 0),
+                            offset: Offset(-_ctrl.value * setWidth, 0),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 22),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               child: pillStrip,
                             ),
                           ),
@@ -709,13 +715,13 @@ class _BrandTrustPillState extends State<_BrandTrustPill> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
           transform: Matrix4.identity()..translate(0.0, _hovered ? -2.0 : 0.0),
-          width: 56,
-          height: 56,
-          padding: const EdgeInsets.all(8),
+          width: 88,
+          height: 88,
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.white,
             // Square box (rounded corners) instead of the old rounded pill.
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFF7DD3FC)),
             boxShadow: [
               BoxShadow(

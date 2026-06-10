@@ -287,7 +287,10 @@ class _DealsSectionState extends State<DealsSection> {
           ),
           SizedBox(height: isWide ? 12 : 8),
           SizedBox(
-            height: cardWidth + (isWide ? 64 : 52),
+            // Hug the card: square image + name + price all live inside the box.
+            // Enough for the price + discount chip to wrap to a 2nd line on
+            // narrow cards without overlapping/overflowing the box.
+            height: cardWidth + (isWide ? 74 : 62),
             child: ListView.separated(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
@@ -333,72 +336,59 @@ class _DealProductCardState extends State<_DealProductCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           transform: Matrix4.identity()..translate(0.0, _hovered ? -2.0 : 0.0),
+          // Whole product \u2014 image + name + price \u2014 inside ONE white box, same
+          // look as the brand boxes.
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0x14000000)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(_hovered ? 0.22 : 0.12),
+                blurRadius: _hovered ? 16 : 7,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           clipBehavior: Clip.hardEdge,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Square product image \u2014 contain + inset so the looping animation
+              // has headroom and never clips the product.
               AspectRatio(
                 aspectRatio: 1,
                 child: Stack(
+                  clipBehavior: Clip.hardEdge,
                   children: [
-                    Container(
-                      color: const Color(0xFFF1F5F9),
-                      child: p.imageUrl.isNotEmpty
-                          ? AnimatedProductImage(
-                              animation: p.imageAnimation,
-                              child: AnimatedScale(
-                              scale: _hovered ? 1.05 : 1.0,
-                              duration: const Duration(milliseconds: 500),
-                              curve: Curves.easeOut,
-                              child: Image.network(
-                                p.imageUrl,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                cacheWidth: 320,
-                                filterQuality: FilterQuality.medium,
-                                errorBuilder: (_, __, ___) => const Center(
-                                  child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
+                        child: p.imageUrl.isNotEmpty
+                            ? AnimatedProductImage(
+                                animation: p.imageAnimation,
+                                child: AnimatedScale(
+                                  scale: _hovered ? 1.03 : 1.0,
+                                  duration: const Duration(milliseconds: 500),
+                                  curve: Curves.easeOut,
+                                  child: Image.network(
+                                    p.imageUrl,
+                                    fit: BoxFit.contain,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    cacheWidth: 320,
+                                    filterQuality: FilterQuality.medium,
+                                    errorBuilder: (_, __, ___) => const Center(
+                                      child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
+                                    ),
+                                  ),
                                 ),
+                              )
+                            : const Center(
+                                child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
                               ),
-                            ),
-                            )
-                          : const Center(
-                              child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
-                            ),
-                    ),
-                    if (discount > 0)
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF16A34A),
-                            borderRadius: BorderRadius.circular(4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.15),
-                                blurRadius: 3,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            '$discount% OFF',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ),
                       ),
+                    ),
                     if (outOfStock)
                       Positioned.fill(
                         child: Container(
@@ -427,8 +417,9 @@ class _DealProductCardState extends State<_DealProductCard> {
                   ],
                 ),
               ),
+              // Name + price INSIDE the box (dark text on white).
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -444,8 +435,10 @@ class _DealProductCardState extends State<_DealProductCard> {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 5,
+                      runSpacing: 3,
                       children: [
                         Text(
                           '\u20B9${p.effectivePrice.toStringAsFixed(0)}',
@@ -456,21 +449,24 @@ class _DealProductCardState extends State<_DealProductCard> {
                             height: 1.0,
                           ),
                         ),
-                        if (discount > 0) ...[
-                          const SizedBox(width: 4),
-                          Flexible(
+                        if (discount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16A34A),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             child: Text(
-                              '\u20B9${p.price.toStringAsFixed(0)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              '$discount% OFF',
                               style: const TextStyle(
-                                fontSize: 10,
-                                color: Color(0xFF94A3B8),
-                                decoration: TextDecoration.lineThrough,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0.2,
                               ),
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ],
