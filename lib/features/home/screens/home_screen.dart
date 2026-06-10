@@ -287,11 +287,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           break;
         case 'today_offers':
           // "Today's Offers" — render as its own styled deal band (like Flash /
-          // Daily Deals). Dedupe by product id so a product offered in multiple
-          // variants doesn't appear twice.
+          // Daily Deals). Dedupe on the *resolved variant* (selected_variant_id)
+          // not the product id: the admin can curate two variants of the same
+          // product, and the backend sends each as its own entry with distinct
+          // price/image. Keying on id alone would collapse them and silently
+          // drop a curated variant. Fall back to id when no variant is set.
           final seenOffer = <String>{};
-          final offerProducts =
-              section.products.where((p) => seenOffer.add(p.id)).toList();
+          final offerProducts = section.products
+              .where((p) => seenOffer.add(p.selectedVariantId ?? p.id))
+              .toList();
           if (offerProducts.isNotEmpty) {
             slivers.add(SliverToBoxAdapter(
               child: RepaintBoundary(

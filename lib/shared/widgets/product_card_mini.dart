@@ -40,13 +40,12 @@ class _ProductCardMiniState extends State<ProductCardMini> {
   static const _success = Color(0xFF16A34A);
   static const _wishlistRed = Color(0xFFEF4444);
 
-  int get _discountPercent {
-    final p = widget.product.price;
-    final o = widget.product.offerPrice;
-    if (o == null || p <= 0 || o >= p) return 0;
-    final pct = ((p - o) / p * 100).round();
-    return pct;
-  }
+  // Trust the backend's advertised offer percent (Product.discountPercent),
+  // which uses offer_discount_percent when set and only falls back to a
+  // price-ratio calc. Computing purely from price/offerPrice here showed the
+  // wrong number (e.g. 6% instead of the offer's real 15%) whenever a
+  // max-discount cap limited the rupee saving below the advertised percent.
+  int get _discountPercent => widget.product.discountPercent.round();
 
   Future<void> _toggleWishlist() async {
     final wp = context.read<WishlistProvider>();
@@ -141,25 +140,22 @@ class _ProductCardMiniState extends State<ProductCardMini> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (p.brand.isNotEmpty || hasRating) _buildBrandRow(p, hasRating),
-                    const SizedBox(height: 4),
-                    // Always reserve two lines so the price row and the Add/Buy
-                    // bar line up across every card, no matter the name length.
-                    SizedBox(
-                      height: 34,
-                      child: Text(
-                        p.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1A1A1A),
-                          height: 1.25,
-                          letterSpacing: -0.1,
-                        ),
+                    const SizedBox(height: 3),
+                    // Name sized to its content (1–2 lines) and the price sits
+                    // directly under it — no reserved blank line / gap.
+                    Text(
+                      p.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A1A1A),
+                        height: 1.25,
+                        letterSpacing: -0.1,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 3),
                     _buildPriceRow(p, discount),
                     // No savings row here — the discount is already shown as the
                     // badge on the image, so there's no empty space between the
@@ -204,13 +200,20 @@ class _ProductCardMiniState extends State<ProductCardMini> {
                     child: SizedBox.expand(
                       // Primary image plays the product's admin-set animation
                       // (bounce/pulse/zoom/...). Hover-swap images stay static.
-                      child: i == 0
-                          ? AnimatedProductImage(
-                              animation: widget.product.imageAnimation,
-                              child: ImagePlaceholder(
-                                imageUrl: images[i],
-                                icon: Icons.phone_android,
-                                fit: BoxFit.cover,
+                      child: i == 0 &&
+                              widget.product.imageAnimation != ImageAnimation.none
+                          // Animated image: inset + contain so the looping
+                          // zoom/bounce has headroom and never clips the product
+                          // off at the edges.
+                          ? Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: AnimatedProductImage(
+                                animation: widget.product.imageAnimation,
+                                child: ImagePlaceholder(
+                                  imageUrl: images[i],
+                                  icon: Icons.phone_android,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             )
                           : ImagePlaceholder(
