@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
@@ -219,7 +220,9 @@ class _OffersScreenState extends State<OffersScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () {},
+                // Previously a no-op, so tapping an offer showed nothing. Take
+                // the user to the product listing so they can shop the deal.
+                onPressed: () => context.push('/shop/products'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.primary),

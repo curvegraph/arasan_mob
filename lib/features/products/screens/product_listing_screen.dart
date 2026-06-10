@@ -303,12 +303,16 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
             ? 5
             : availableWidth > 600
                 ? 4
-                : 3;
+                : 2;
 
         final itemWidth =
             (availableWidth - (padding * 2) - (spacing * (crossAxisCount - 1))) /
                 crossAxisCount;
-        final itemHeight = itemWidth * 1.70;
+        // ProductCardMini is a rich card (image + brand + name + price + Add/Buy
+        // bar). At 3 narrow columns its content overflowed the cell (the cards
+        // visibly overlapped). Use 2 columns on phones and a tall-enough cell —
+        // matching the homepage grid — so nothing overflows.
+        final itemHeight = itemWidth * 1.85;
 
         return CustomScrollView(
           controller: showPlaceholders ? null : _scrollController,
