@@ -147,34 +147,12 @@ class _ProductDetailHeader extends StatelessWidget {
                         color: Color(0xFF1A1A1A), size: 24),
                   ),
                 ),
-                // Search (tappable → search screen)
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => context.push('/shop/search'),
-                    child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.search,
-                              size: 18, color: Color(0xFF64748B)),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Search products...',
-                              style: TextStyle(
-                                  color: Color(0xFF94A3B8), fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                // Inline live search (same behaviour as the home search bar) —
+                // typing shows product suggestions here, no navigation.
+                const Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6),
+                    child: SearchBarButton(compact: true),
                   ),
                 ),
                 // Cart

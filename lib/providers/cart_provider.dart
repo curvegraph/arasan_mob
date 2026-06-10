@@ -178,10 +178,29 @@ class CartProvider extends ChangeNotifier {
   }
 
   Future<void> addToCart(Product product, {int quantity = 1}) async {
-    // Cart is server-only. Guest taps should be intercepted by `requireAuth`
-    // in the UI; we no-op here so a slipped-through call doesn't mutate a
-    // local-only cart that never reconciles with the backend.
-    if (!_isLoggedIn) return;
+    if (!_isLoggedIn) {
+      // Guest cart kept locally; it's synced to the server on login.
+      final i =
+          _localCartItems.indexWhere((it) => it.product.id == product.id);
+      if (i >= 0) {
+        _localCartItems[i] = _localCartItems[i]
+            .copyWith(quantity: _localCartItems[i].quantity + quantity);
+      } else {
+        _localCartItems.add(CartItem(
+          id: 'local_${product.id}',
+          product: product,
+          quantity: quantity,
+        ));
+      }
+      _cart = Cart(
+        items: _localCartItems,
+        appliedCouponCode: _cart.appliedCouponCode,
+        couponDiscount: _cart.couponDiscount,
+      );
+      _rebuildCartLookup();
+      notifyListeners();
+      return;
+    }
     try {
       await _cartApiService.addToCart(product.id, quantity: quantity);
       await loadCart();
@@ -207,6 +226,7 @@ class CartProvider extends ChangeNotifier {
         appliedCouponCode: _cart.appliedCouponCode,
         couponDiscount: _cart.couponDiscount,
       );
+      _rebuildCartLookup();
       notifyListeners();
     }
   }

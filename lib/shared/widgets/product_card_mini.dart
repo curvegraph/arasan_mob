@@ -56,31 +56,19 @@ class _ProductCardMiniState extends State<ProductCardMini> {
 
   Future<void> _addToCart() async {
     if (widget.product.isOutOfStock) return;
-    await requireAuth(
-      context,
-      message: 'Please login to add to cart',
-      action: () async {
-        await context.read<CartProvider>().addToCart(widget.product);
-        if (!mounted) return;
-        setState(() => _justAdded = true);
-        Future.delayed(const Duration(milliseconds: 1400), () {
-          if (mounted) setState(() => _justAdded = false);
-        });
-      },
-    );
+    // Add and stay (with a brief "added" state) so the user keeps shopping.
+    await context.read<CartProvider>().addToCart(widget.product);
+    if (!mounted) return;
+    setState(() => _justAdded = true);
+    Future.delayed(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _justAdded = false);
+    });
   }
 
   Future<void> _buyNow() async {
     if (widget.product.isOutOfStock) return;
-    await requireAuth(
-      context,
-      message: 'Please login to buy',
-      action: () async {
-        await context.read<CartProvider>().addToCart(widget.product);
-        if (!context.mounted) return;
-        context.push('/shop/checkout');
-      },
-    );
+    // Straight to the order-summary page; not added to the cart.
+    context.push('/shop/order-summary', extra: widget.product);
   }
 
   @override

@@ -8,6 +8,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/config/supabase_config.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/product.dart';
+import '../../../data/services/product_api_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/product_provider.dart';
@@ -16,6 +17,7 @@ import '../../../providers/store_settings_provider.dart';
 import '../../../providers/wishlist_provider.dart';
 import '../../../providers/user_activity_provider.dart';
 import '../../../shared/widgets/auth_gate.dart';
+import '../../../shared/widgets/product_card_mini.dart';
 import '../../../shared/widgets/delivery_badge.dart';
 import '../../../shared/widgets/tax_label.dart';
 import '../../../shared/widgets/trust_badges_row.dart';
@@ -33,7 +35,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   int _qty = 1;
   int _selectedImageIndex = 0;
   ProductVariant? _selectedVariant;
+  String? _selectedColor;
+  bool _variantInitialized = false;
+  bool _detailLoading = true;
+  List<Product> _related = const [];
   late AnimationController _animationController;
+
+  String _colorKey(ProductVariant v) {
+    final c = (v.color ?? '').trim();
+    return c.isEmpty ? 'Default' : c;
+  }
 
   // Display values that follow the currently selected variant (or the base
   // product when none is selected).
@@ -49,6 +60,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   int _dispDiscount(Product p) =>
       (_selectedVariant?.discountPercent ?? p.discountPercent).toInt();
 
+  /// The product carrying the currently selected variant's price/image/label —
+  /// used when adding to cart or buying now.
+  Product _effectiveProduct(Product product) {
+    final v = _selectedVariant;
+    if (v == null) return product;
+    return product.copyWith(
+      price: v.price,
+      offerPrice: v.offerPrice,
+      offerDiscountPercent: v.offerDiscountPercent,
+      imageUrls: v.imageUrls.isNotEmpty ? v.imageUrls : product.imageUrls,
+      variantLabel: [
+        if ((v.color ?? '').trim().isNotEmpty) v.color!.trim(),
+        v.label,
+      ].join(' · '),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -57,14 +85,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       duration: const Duration(milliseconds: 800),
     );
     _animationController.forward();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = context.read<ProductProvider>();
-      // Always fetch full product (listing cache doesn't include specs/description)
-      provider.fetchProductById(widget.productId);
       // Re-fetch settings so admin trust-badge / delivery / tax edits show up
       // immediately instead of after the 60s background poll.
-      context.read<StoreSettingsProvider>().loadSettings(force: true);
-      context.read<UserActivityProvider>().addRecentlyViewed(widget.productId);
+      if (mounted) {
+        context.read<StoreSettingsProvider>().loadSettings(force: true);
+        context.read<UserActivityProvider>().addRecentlyViewed(widget.productId);
+      }
+      // Always fetch full product (listing cache doesn't include specs /
+      // description / variants). Keep showing a loader until this resolves so
+      // we never flash "product not found" for a product that does exist.
+      await provider.fetchProductById(widget.productId);
+      if (mounted) setState(() => _detailLoading = false);
+      // Related products come from a dedicated endpoint (the home flow doesn't
+      // populate the provider's catalogue list).
+      try {
+        final rel = await ProductApiService()
+            .getRelatedProducts(widget.productId, limit: 8);
+        if (mounted) setState(() => _related = rel);
+      } catch (_) {}
     });
   }
 
@@ -79,8 +119,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     final productProvider = context.watch<ProductProvider>();
     final product = productProvider.getProductById(widget.productId);
     if (product == null) {
-      // Show loading if products are still being fetched
-      if (productProvider.isLoading || productProvider.allProducts.isEmpty) {
+      // Show a loader while the detail fetch is still in flight (or the catalog
+      // is still loading) — only fall back to "not found" once we've actually
+      // tried and the product genuinely doesn't exist.
+      if (_detailLoading ||
+          productProvider.isLoading ||
+          productProvider.allProducts.isEmpty) {
         return Scaffold(
           backgroundColor: AppColors.surface,
           body: const Center(
@@ -101,6 +145,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     final images = product.imageUrls.isNotEmpty ? product.imageUrls : <String>[];
     final width = MediaQuery.sizeOf(context).width;
     final isDesktop = width >= 768;
+
+    // Default-select the first variant once it loads, so the page opens on a
+    // concrete colour + storage (matching the web).
+    if (!_variantInitialized && product.variants.isNotEmpty) {
+      _variantInitialized = true;
+      final first = product.variants.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _selectedVariant = first;
+          _selectedColor = _colorKey(first);
+        });
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -178,13 +236,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 _buildProductName(product),
                 const SizedBox(height: 8),
                 _buildRatingRow(avgRating, reviewCount, product),
-                if (product.variants.length >= 2) ...[
+                if (product.variants.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   _buildVariantSelector(product),
                 ],
                 const SizedBox(height: 12),
                 _buildPriceRow(product),
-                const SizedBox(height: 4),
+                const SizedBox(height: 12),
+                _buildQuantitySelector(),
+                const SizedBox(height: 10),
                 const TaxLabel(fontSize: 12),
                 const SizedBox(height: 6),
                 const DeliveryBadge(
@@ -193,8 +253,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 ),
                 const SizedBox(height: 16),
                 TrustBadgesRow(product: product),
-                const SizedBox(height: 16),
-                _buildQuantitySelector(),
                 const SizedBox(height: 16),
                 if (product.description.isNotEmpty) _buildDescription(product),
                 if (product.specs.isNotEmpty) _buildHighlights(product),
@@ -294,8 +352,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       content = AspectRatio(
         aspectRatio: 1,
         child: Container(
-          color: AppColors.surfaceVariant,
-          child: _buildProductImage(product.thumbnailUrl, animation: product.imageAnimation),
+          color: Colors.white,
+          child: _buildProductImage(product.thumbnailUrl),
         ),
       );
     } else {
@@ -416,9 +474,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
             itemBuilder: (context, index) {
               return _ZoomableImage(
                 child: Container(
-                  color: AppColors.surfaceVariant,
-                  padding: const EdgeInsets.all(24),
-                  child: _buildProductImage(images[index], animation: product.imageAnimation),
+                  // White backdrop — product photos already sit on white, so a
+                  // grey backdrop made white/light products (e.g. vivo 7) look
+                  // greyed-over.
+                  color: Colors.white,
+                  padding: const EdgeInsets.all(12),
+                  // No image_animation on the main detail image: animations like
+                  // `fadeOut` end at 0.3 opacity and left the image permanently
+                  // dimmed/greyed. The main product image must stay fully visible.
+                  child: _buildProductImage(images[index]),
                 ),
               );
             },
@@ -567,7 +631,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
 
     Widget imageWidget = CachedNetworkImage(
       imageUrl: url,
-      fit: BoxFit.cover,
+      // Show the whole product, sharp (no crop, high-quality scaling).
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
       placeholder: (_, __) => Center(
         child: Icon(Icons.phone_android, size: 48, color: AppColors.textHint),
       ),
@@ -704,8 +770,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   }
 
   Widget _buildProductName(Product product) {
+    // Append the selected colour + variant, e.g. "vivo 7 (Black, 128GB + 16GB
+    // RAM)". Falls back to just the name when no variant is selected.
+    var name = product.name;
+    final v = _selectedVariant;
+    if (v != null) {
+      final parts = <String>[];
+      final col = (v.color ?? '').trim();
+      if (col.isNotEmpty) parts.add(col);
+      if (v.label.isNotEmpty && v.label != col) parts.add(v.label);
+      if (parts.isNotEmpty) name = '${product.name} (${parts.join(', ')})';
+    }
     return Text(
-      product.name,
+      name,
       style: const TextStyle(
         fontSize: 22,
         fontWeight: FontWeight.w600,
@@ -753,114 +830,221 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     );
   }
 
-  /// Compact horizontal variant picker (colour + storage/RAM). Tapping a box
+  /// Two-level variant picker like the web: a COLOUR row (image swatches) and,
+  /// below it, the STORAGE/RAM options for the selected colour. Picking either
   /// swaps the main image, price and discount in place.
   Widget _buildVariantSelector(Product product) {
     final variants = product.variants;
-    if (variants.length < 2) return const SizedBox.shrink();
+    if (variants.isEmpty) return const SizedBox.shrink();
+
+    // Distinct colours, in order of appearance.
+    final colours = <String>[];
+    for (final v in variants) {
+      final k = _colorKey(v);
+      if (!colours.contains(k)) colours.add(k);
+    }
+    final selectedColour = _selectedColor ?? _colorKey(variants.first);
+    final colourVariants =
+        variants.where((v) => _colorKey(v) == selectedColour).toList();
+    // Equal-width storage boxes — two per row.
+    final boxW = (MediaQuery.sizeOf(context).width - 32 - 10) / 2;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Variants',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w900,
-            color: Color(0xFF1A1A1A),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 182,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.zero,
-            itemCount: variants.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (_, i) {
-              final v = variants[i];
-              final selected = _selectedVariant?.id == v.id;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  _selectedVariant = selected ? null : v;
-                  _selectedImageIndex = 0;
-                }),
-                child: Container(
-                  width: 110,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: selected
-                          ? const Color(0xFF1400E0)
-                          : const Color(0xFFE2E8F0),
-                      width: selected ? 2 : 1,
-                    ),
-                  ),
-                  clipBehavior: Clip.hardEdge,
+        // ---- COLOUR ----
+        if (colours.length > 1) ...[
+          _variantHeading('Selected Color: ', selectedColour),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.zero,
+              itemCount: colours.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                final col = colours[i];
+                final rep =
+                    variants.firstWhere((v) => _colorKey(v) == col);
+                final selected = col == selectedColour;
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    _selectedColor = col;
+                    _selectedVariant = rep;
+                    _selectedImageIndex = 0;
+                  }),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AspectRatio(
-                        aspectRatio: 1,
-                        child: Container(
+                      Container(
+                        width: 78,
+                        height: 78,
+                        decoration: BoxDecoration(
                           color: const Color(0xFFF8FAFC),
-                          padding: const EdgeInsets.all(6),
-                          child: v.imageUrl.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: v.imageUrl,
-                                  fit: BoxFit.contain,
-                                  errorWidget: (_, __, ___) => const Icon(
-                                      Icons.phone_android,
-                                      color: AppColors.textHint),
-                                )
-                              : const Icon(Icons.phone_android,
-                                  color: AppColors.textHint),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: selected
+                                ? const Color(0xFF1400E0)
+                                : const Color(0xFFE2E8F0),
+                            width: selected ? 2 : 1,
+                          ),
                         ),
+                        clipBehavior: Clip.hardEdge,
+                        padding: const EdgeInsets.all(6),
+                        child: (rep.imageUrl.isNotEmpty ||
+                                product.imageUrl.isNotEmpty)
+                            ? CachedNetworkImage(
+                                imageUrl: rep.imageUrl.isNotEmpty
+                                    ? rep.imageUrl
+                                    : product.imageUrl,
+                                fit: BoxFit.contain,
+                                errorWidget: (_, __, ___) => const Icon(
+                                    Icons.phone_android,
+                                    color: AppColors.textHint),
+                              )
+                            : const Icon(Icons.phone_android,
+                                color: AppColors.textHint),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 5, 8, 7),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (v.color != null && v.color!.isNotEmpty)
-                              Text(
-                                v.color!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1A1A1A),
-                                ),
-                              ),
-                            Text(
-                              v.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 10, color: Color(0xFF64748B)),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              CurrencyFormatter.format(v.effectivePrice),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF1400E0),
-                              ),
-                            ),
-                          ],
+                      const SizedBox(height: 5),
+                      SizedBox(
+                        width: 80,
+                        child: Text(
+                          col,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: selected
+                                ? const Color(0xFF1400E0)
+                                : const Color(0xFF64748B),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
+          const SizedBox(height: 16),
+        ],
+        // ---- STORAGE / RAM (for the selected colour) ----
+        _variantHeading('Variant: ', _selectedVariant?.label ?? ''),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: colourVariants.map((v) {
+            final selected = _selectedVariant?.id == v.id;
+            return GestureDetector(
+              onTap: () => setState(() {
+                _selectedVariant = v;
+                _selectedImageIndex = 0;
+              }),
+              child: Container(
+                width: boxW,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? const Color(0xFF1400E0).withValues(alpha: 0.06)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: selected
+                        ? const Color(0xFF1400E0)
+                        : const Color(0xFFE2E8F0),
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      v.label,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    if (v.discountPercent > 0)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '↓${v.discountPercent.toInt()}%',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF16A34A),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            CurrencyFormatter.format(v.price),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF94A3B8),
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ],
+                      ),
+                    Text(
+                      CurrencyFormatter.format(v.effectivePrice),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF1A1A1A),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      v.isOutOfStock ? 'Out of stock' : 'In stock',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: v.isOutOfStock
+                            ? const Color(0xFFEF4444)
+                            : const Color(0xFF16A34A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ],
+    );
+  }
+
+  Widget _variantHeading(String label, String value) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF1A1A1A),
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF64748B),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1099,52 +1283,88 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         child: Row(
           children: [
             // Price
-            Expanded(
-              flex: 3,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  CurrencyFormatter.format(_dispEffectivePrice(product)),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                if (_dispDiscount(product) > 0)
                   Text(
-                    CurrencyFormatter.format(_dispEffectivePrice(product)),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    '${_dispDiscount(product)}% off',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.success),
                   ),
-                  if (_dispDiscount(product) > 0)
-                    Text(
-                      '${_dispDiscount(product)}% off',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.success),
-                    ),
-                ],
+              ],
+            ),
+            const SizedBox(width: 10),
+            // Add to Cart — compact icon button
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: OutlinedButton(
+                onPressed: product.isOutOfStock
+                    ? null
+                    : () {
+                        // Add to cart → stay on the page so the user can keep
+                        // shopping (standard flow). Already-in-cart taps open
+                        // the cart.
+                        if (isInCart) {
+                          context.push('/shop/cart');
+                          return;
+                        }
+                        final ep = _effectiveProduct(product);
+                        for (int i = 0; i < _qty; i++) {
+                          cart.addToCart(ep);
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Added to cart'),
+                            duration: const Duration(seconds: 2),
+                            behavior: SnackBarBehavior.floating,
+                            action: SnackBarAction(
+                              label: 'VIEW CART',
+                              onPressed: () => context.push('/shop/cart'),
+                            ),
+                          ),
+                        );
+                      },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  backgroundColor: Colors.white,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Icon(
+                    isInCart ? Icons.shopping_cart : Icons.shopping_cart_outlined,
+                    size: 20),
               ),
             ),
-            const SizedBox(width: 12),
-            // Add to Cart button
+            const SizedBox(width: 8),
+            // Buy Now — primary action
             Expanded(
-              flex: 4,
               child: SizedBox(
-                height: 46,
-                child: ElevatedButton(
+                height: 48,
+                child: ElevatedButton.icon(
                   onPressed: product.isOutOfStock
                       ? null
                       : () {
-                          if (isInCart) {
-                            context.push('/shop/cart');
-                          } else {
-                            final auth = context.read<AuthProvider>();
-                            if (auth.isLoggedIn) {
-                              for (int i = 0; i < _qty; i++) cart.addToCart(product);
-                            } else {
-                              LoginDialog.showWithMessage(context, 'Please login to add to cart');
-                            }
-                          }
+                          // Straight to the order-summary page for THIS product
+                          // (with its selected variant). It is NOT added to the
+                          // cart — that happens only at Secure Checkout.
+                          context.push('/shop/order-summary',
+                              extra: _effectiveProduct(product));
                         },
+                  icon: const Icon(Icons.flash_on, size: 18),
+                  label: Text(product.isOutOfStock ? 'Out of stock' : 'Buy Now'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
                   ),
-                  child: Text(product.isOutOfStock ? 'OUT OF STOCK' : isInCart ? 'GO TO CART' : 'ADD TO CART'),
                 ),
               ),
             ),
@@ -1309,9 +1529,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   // SIMILAR PRODUCTS
   // ===========================================================================
   Widget _buildSimilarProducts(ProductProvider provider, Product product) {
-    final similar = provider.allProducts
-        .where((p) => p.id != product.id && p.isActive && (p.brand == product.brand || p.category == product.category))
-        .take(8).toList();
+    // Prefer the dedicated related-products endpoint. Fall back to whatever the
+    // provider has cached (home/listing/catalogue lists), deduped by id.
+    final seen = <String>{product.id};
+    final pool = <Product>[];
+    for (final p in [
+      ..._related,
+      ...provider.homeProducts,
+      ...provider.paginatedProducts,
+      ...provider.allProducts,
+    ]) {
+      if (p.isActive && seen.add(p.id)) pool.add(p);
+    }
+    final similar = pool.take(6).toList();
 
     if (similar.isEmpty) return const SizedBox.shrink();
 
@@ -1319,61 +1549,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'YOU MAY ALSO LIKE',
+          'You might also like',
           style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-            letterSpacing: 0.8,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1A1A1A),
+            letterSpacing: -0.3,
           ),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 220,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: similar.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) {
-              final item = similar[i];
-              return GestureDetector(
-                onTap: () => context.push('/shop/product/${item.id}'),
-                child: SizedBox(
-                  width: 150,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        height: 140,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: _buildProductImage(
-                            item.thumbnailUrl ?? (item.imageUrls.isNotEmpty ? item.imageUrls.first : null),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, height: 1.3),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        CurrencyFormatter.format(item.effectivePrice),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
+        // Grid (no horizontal scrolling) — same card as the all-products grid.
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.55,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
           ),
+          itemCount: similar.length > 6 ? 6 : similar.length,
+          itemBuilder: (_, i) => ProductCardMini(product: similar[i]),
         ),
       ],
     );

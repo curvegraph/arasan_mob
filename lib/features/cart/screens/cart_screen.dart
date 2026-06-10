@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/cart.dart';
+import '../../../data/models/product.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/store_settings_provider.dart';
@@ -36,6 +37,105 @@ class CartScreen extends StatelessWidget {
           : isWide
               ? _buildWideLayout(context, cart, cartProvider)
               : _buildNarrowLayout(context, cart, cartProvider),
+      bottomNavigationBar:
+          (cart.isEmpty || isWide) ? null : _buildCartBottomBar(context, cart),
+    );
+  }
+
+  /// Sticky bottom bar (Flipkart-style): savings note + struck total + payable
+  /// + Place Order. Delivery/tax are applied on the checkout page.
+  Widget _buildCartBottomBar(BuildContext context, Cart cart) {
+    final original = cart.totalOriginalPrice;
+    final payable = cart.totalAmountBeforeTax;
+    final savings = cart.totalSavings;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (savings > 0)
+              Container(
+                width: double.infinity,
+                color: const Color(0xFFE8F8EE),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.savings_outlined,
+                        size: 16, color: Color(0xFF16A34A)),
+                    const SizedBox(width: 6),
+                    Text(
+                      "You'll save ${CurrencyFormatter.format(savings)} on this order!",
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF16A34A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (savings > 0)
+                        Text(
+                          CurrencyFormatter.format(original),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF94A3B8),
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                      Text(
+                        CurrencyFormatter.format(payable),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1A1A1A),
+                          height: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  ElevatedButton(
+                    onPressed: () => context.push('/shop/checkout'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                      textStyle: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w900),
+                    ),
+                    child: const Text('Place Order'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -197,15 +297,45 @@ class CartScreen extends StatelessWidget {
         _buildBreadcrumb(context),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Text(
-            'Your Cart',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              color: const Color(0xFF1A1A1A),
-              letterSpacing: -0.6,
-              height: 1.0,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'YOUR SELECTION',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.primary,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  const Text(
+                    'Shopping Cart',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF1A1A1A),
+                      letterSpacing: -0.6,
+                      height: 1.0,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '· ${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         Padding(
@@ -213,12 +343,10 @@ class CartScreen extends StatelessWidget {
           child: Column(
             children: [
               ...cart.activeItems.map((item) => _CartItemCard(item: item, cartProvider: cartProvider)),
-              const SizedBox(height: 16),
-              _OrderSummaryCard(cart: cart),
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -263,6 +391,326 @@ class CartScreen extends StatelessWidget {
     );
   }
 
+}
+
+/// Reached from "Buy Now" — a SINGLE-product order summary (image #14). The
+/// product is passed directly and is NOT added to the cart (standard Flipkart
+/// flow); it only enters the cart when the user hits Secure Checkout.
+class OrderSummaryScreen extends StatefulWidget {
+  final Product product;
+  const OrderSummaryScreen({super.key, required this.product});
+
+  @override
+  State<OrderSummaryScreen> createState() => _OrderSummaryScreenState();
+}
+
+class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
+  int _qty = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.product;
+    final unit = p.effectivePrice;
+    final original = p.price;
+    final discount = p.discountPercent.toInt();
+    final subtotal = unit * _qty;
+    final saved = (original - unit) * _qty;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF0F2F8),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          // Header
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('YOUR SELECTION',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                          letterSpacing: 1.0)),
+                  const SizedBox(height: 2),
+                  const Text('Shopping Cart',
+                      style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1A1A1A),
+                          letterSpacing: -0.6,
+                          height: 1.0)),
+                ],
+              ),
+              if (saved > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F8EE),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text("You're saving ${CurrencyFormatter.format(saved)}",
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF16A34A))),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Product card
+          Container(
+            decoration: BoxDecoration(
+                color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: ImagePlaceholder(
+                        imageUrl: p.imageUrl,
+                        width: 96,
+                        height: 96,
+                        icon: Icons.phone_android,
+                      ),
+                    ),
+                    if (discount > 0)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(6)),
+                          child: Text('$discount% OFF',
+                              style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white)),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(p.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF1A1A1A))),
+                      if ((p.variantLabel ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(8)),
+                          child: Text(p.variantLabel!,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF475569))),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(CurrencyFormatter.format(unit),
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF1A1A1A))),
+                          if (discount > 0) ...[
+                            const SizedBox(width: 8),
+                            Text(CurrencyFormatter.format(original),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF94A3B8),
+                                    decoration: TextDecoration.lineThrough)),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      // Quantity stepper
+                      Container(
+                        decoration: BoxDecoration(
+                            border:
+                                Border.all(color: const Color(0xFFE2E8F0)),
+                            borderRadius: BorderRadius.circular(10)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _qtyBtn(Icons.remove,
+                                _qty > 1 ? () => setState(() => _qty--) : null),
+                            SizedBox(
+                                width: 36,
+                                child: Center(
+                                    child: Text('$_qty',
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w900)))),
+                            _qtyBtn(Icons.add, () => setState(() => _qty++)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Order Summary box
+          Container(
+            decoration: BoxDecoration(
+                color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('ORDER SUMMARY',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF1A1A1A),
+                          letterSpacing: 0.3)),
+                ),
+                const SizedBox(height: 16),
+                _sumRow('Subtotal', CurrencyFormatter.format(subtotal)),
+                if (saved > 0) ...[
+                  const SizedBox(height: 10),
+                  _sumRow('Discount', '- ${CurrencyFormatter.format(saved)}',
+                      valueColor: const Color(0xFF16A34A)),
+                ],
+                const SizedBox(height: 10),
+                _sumRow('Delivery', 'At checkout'),
+                const SizedBox(height: 14),
+                Container(height: 1, color: const Color(0xFFE2E8F0)),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Payable',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B))),
+                    Text(CurrencyFormatter.format(subtotal),
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.primary)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // Only now does it enter the cart, then on to checkout.
+                      context.read<CartProvider>().addToCart(p, quantity: _qty);
+                      context.push('/shop/checkout');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.lock_outline, size: 16),
+                        SizedBox(width: 8),
+                        Text('Secure Checkout',
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w900)),
+                        SizedBox(width: 8),
+                        Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified_user_outlined,
+                        size: 13, color: Color(0xFF64748B)),
+                    SizedBox(width: 5),
+                    Text('100% safe & encrypted payment',
+                        style:
+                            TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: GestureDetector(
+              onTap: () => context.pop(),
+              child: Text('← Continue shopping',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sumRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B))),
+        Text(value,
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: valueColor ?? const Color(0xFF1E293B))),
+      ],
+    );
+  }
+
+  Widget _qtyBtn(IconData icon, VoidCallback? onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(icon,
+            size: 16,
+            color: onTap == null
+                ? const Color(0xFFCBD5E1)
+                : const Color(0xFF1A1A1A)),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -900,38 +1348,35 @@ class _OrderSummaryCard extends StatelessWidget {
                   _row('Discount', '- ${CurrencyFormatter.format(cart.productDiscount)}',
                       valueColor: const Color(0xFF10B981)),
                 ],
-                Builder(builder: (ctx) {
-                  final settings = ctx.watch<StoreSettingsProvider>();
-                  final tax = settings.taxFor(cart.subtotal);
-                  if (tax <= 0) return const SizedBox(height: 4);
-                  return Column(
-                    children: [
-                      const SizedBox(height: 10),
-                      _row(settings.taxLabel(), CurrencyFormatter.format(tax)),
-                    ],
-                  );
-                }),
+                const SizedBox(height: 10),
+                // Delivery & tax are applied on the checkout page (admin rules).
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Text('Delivery',
+                        style: TextStyle(fontSize: 14, color: Color(0xFF64748B))),
+                    Text('At checkout',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B))),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 Container(height: 1, color: const Color(0xFFE2E8F0)),
                 const SizedBox(height: 14),
 
-                // Total
-                Builder(builder: (ctx) {
-                  final settings = ctx.watch<StoreSettingsProvider>();
-                  final tax = settings.taxFor(cart.subtotal);
-                  final delivery = settings.deliveryChargeFor(cart.subtotal);
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
-                      Text(
-                          CurrencyFormatter.format(
-                              cart.totalAmountWith(tax, delivery: delivery)),
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.primary)),
-                    ],
-                  );
-                }),
+                // Total Payable (excludes delivery/tax — added at checkout)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total Payable',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
+                    Text(
+                        CurrencyFormatter.format(cart.totalAmountBeforeTax),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                  ],
+                ),
 
                 if (cart.totalSavings > 0) ...[
                   const SizedBox(height: 12),
@@ -959,13 +1404,13 @@ class _OrderSummaryCard extends StatelessWidget {
 
                 const SizedBox(height: 18),
 
-                // Continue button
+                // Secure Checkout button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () => context.push('/shop/checkout'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E293B),
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -974,13 +1419,25 @@ class _OrderSummaryCard extends StatelessWidget {
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Go to Checkout',
-                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, letterSpacing: 0.3)),
+                        Icon(Icons.lock_outline, size: 16),
+                        SizedBox(width: 8),
+                        Text('Secure Checkout',
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, letterSpacing: 0.3)),
                         SizedBox(width: 8),
                         Icon(Icons.arrow_forward_rounded, size: 18),
                       ],
                     ),
                   ),
+                ),
+                const SizedBox(height: 10),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.verified_user_outlined, size: 13, color: Color(0xFF64748B)),
+                    SizedBox(width: 5),
+                    Text('100% safe & encrypted payment',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                  ],
                 ),
 
               ],

@@ -9,6 +9,7 @@ import '../../features/products/screens/product_detail_screen.dart';
 import '../../features/search/screens/search_screen.dart';
 import '../../features/offers/screens/offers_screen.dart';
 import '../../features/cart/screens/cart_screen.dart';
+import '../../data/models/product.dart';
 import '../../features/checkout/screens/user_checkout_screen.dart';
 import '../../features/checkout/screens/order_success_screen.dart';
 import '../../features/auth/screens/user_login_screen.dart';
@@ -228,6 +229,18 @@ GoRouter createRouter(AuthProvider authProvider) {
             path: '/shop/cart',
             pageBuilder: (context, state) =>
                 _fadeSlideTransition(state, const CartScreen()),
+          ),
+          GoRoute(
+            path: '/shop/order-summary',
+            pageBuilder: (context, state) {
+              final extra = state.extra;
+              if (extra is Product) {
+                return _fadeSlideTransition(
+                    state, OrderSummaryScreen(product: extra));
+              }
+              // No product passed (e.g. deep link) → fall back to the cart.
+              return _fadeSlideTransition(state, const CartScreen());
+            },
           ),
           GoRoute(
             path: '/shop/checkout',
