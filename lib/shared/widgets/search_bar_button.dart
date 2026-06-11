@@ -188,7 +188,8 @@ class _SearchBarButtonState extends State<SearchBarButton> {
       height: widget.compact ? 40 : 42,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: widget.compact ? const Color(0xFFF1F5F9) : AppColors.background,
+        // Fully white pill (no grey fill) on the home search bar.
+        color: widget.compact ? const Color(0xFFF1F5F9) : Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: _focused ? const Color(0xFF1400E0) : const Color(0xFFE2E8F0),

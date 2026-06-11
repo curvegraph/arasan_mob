@@ -9,6 +9,7 @@ import '../../../core/config/firebase_availability.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/phone_auth_provider.dart';
+import '../../../shared/widgets/google_logo.dart';
 
 /// Unified login screen — phone OTP + Google sign-in.
 /// Matches the Svelte web login page: dark navy gradient mesh,
@@ -503,7 +504,7 @@ class _GoogleButton extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: onTap,
-        icon: const Icon(Icons.g_mobiledata, size: 28, color: Color(0xFF1F2937)),
+        icon: const GoogleLogo(size: 20),
         label: const Text(
           'Continue with Google',
           style: TextStyle(

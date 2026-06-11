@@ -376,7 +376,11 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
             // Breadcrumb header
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              // Extend behind the status bar (no app bar here, and the global
+              // header is suppressed on non-browsing pages) so the breadcrumb
+              // text isn't tucked under the notch.
+              padding: EdgeInsets.fromLTRB(
+                  20, MediaQuery.paddingOf(context).top + 12, 20, 12),
               color: AppColors.primary,
               child: Row(
                 children: [

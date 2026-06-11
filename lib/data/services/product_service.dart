@@ -188,6 +188,15 @@ class ProductService {
     return products;
   }
 
+  /// Products that currently have an offer — product-level OR variant-level.
+  /// The backend returns variant-only offers as the parent card carrying the
+  /// variant's price/offer/image (+ selected_variant_id). Used by the Offers
+  /// page so it shows every discounted product, not just product-level ones.
+  Future<List<Product>> getOfferProducts() async {
+    final data = await _api.get('/homepage/offers');
+    return _parseList(data);
+  }
+
   Future<List<Product>> getFeaturedProductsPaginated({
     String? category,
     String? brand,

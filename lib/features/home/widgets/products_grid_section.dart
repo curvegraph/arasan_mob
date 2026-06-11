@@ -45,11 +45,24 @@ class SliverProductsGridSectionState extends State<SliverProductsGridSection> {
   String? _error;
   Timer? _pollTimer;
 
+  /// True when the admin pinned variant offers to products in this section
+  /// (config.show_variant_offers + a non-empty variant_choices map). Those
+  /// offers live only on the backend-resolved `initialProducts`; the paginated
+  /// fetch path returns plain catalogue rows without them, so we must render
+  /// the embedded list to honor the admin's choice.
+  bool get _hasVariantOffers {
+    if (widget.config?['show_variant_offers'] != true) return false;
+    final choices = widget.config?['variant_choices'];
+    return choices is Map && choices.isNotEmpty;
+  }
+
   /// Render the embedded products as-is when the admin didn't ask for a
-  /// paginated "show all" list. Paginated grids keep fetching so a large
-  /// catalog stays fully browseable via infinite scroll.
+  /// paginated "show all" list — OR when variant offers are configured (those
+  /// only exist on the embedded list). Otherwise paginated grids keep fetching
+  /// so a large catalog stays fully browseable via infinite scroll.
   bool get _useEmbedded =>
-      widget.initialProducts != null && widget.config?['show_pagination'] != true;
+      widget.initialProducts != null &&
+      (widget.config?['show_pagination'] != true || _hasVariantOffers);
 
   @override
   void initState() {

@@ -212,7 +212,10 @@ GoRouter createRouter(AuthProvider authProvider) {
             path: '/shop/product/:id',
             pageBuilder: (context, state) => _fadeZoomTransition(
               state,
-              ProductDetailScreen(productId: state.pathParameters['id']!),
+              ProductDetailScreen(
+                productId: state.pathParameters['id']!,
+                selectedVariantId: state.uri.queryParameters['variant'],
+              ),
             ),
           ),
           GoRoute(

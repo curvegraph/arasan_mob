@@ -26,24 +26,25 @@ class CategoriesSection extends StatelessWidget {
     final homepageProvider = context.watch<HomepageProvider>();
     final allCategories = homepageProvider.categories;
 
-    // The admin's `selected_categories` is used for ORDERING only — many of its
-    // ids are stale and resolve to nothing, which previously hid most
-    // categories. Show EVERY category: the curated/resolved ones first, then
-    // any remaining categories, so all of them appear.
+    // The admin curates `selected_categories` — both WHICH categories appear on
+    // the homepage and their order. Show ONLY those (parity with the web). A
+    // category the admin left out (e.g. Flip Cover / Back Cover) must NOT appear
+    // here even though it's still active in the catalogue; previously we
+    // appended every non-selected category too, which leaked disabled ones onto
+    // the homepage.
     final selectedCategoryIds = (config?['selected_categories'] as List<dynamic>?)
         ?.map((e) => e.toString())
         .toList();
 
     List<CategoryData> categories;
     if (selectedCategoryIds != null && selectedCategoryIds.isNotEmpty) {
-      final selected = selectedCategoryIds
+      categories = selectedCategoryIds
           .map((id) => allCategories.where((c) => c.id == id).firstOrNull)
           .whereType<CategoryData>()
           .toList();
-      final selectedSet = selected.map((c) => c.id).toSet();
-      final rest =
-          allCategories.where((c) => !selectedSet.contains(c.id)).toList();
-      categories = [...selected, ...rest];
+      // Safety net: only if NONE of the curated ids resolve (fully stale
+      // config) fall back to all categories, so the strip is never empty.
+      if (categories.isEmpty) categories = allCategories;
     } else {
       categories = allCategories;
     }

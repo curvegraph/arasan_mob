@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
-import '../../../data/models/offer.dart';
+import '../../../data/models/product.dart';
+import '../../../data/services/product_service.dart';
 import '../../../providers/offer_provider.dart';
+import '../../../shared/widgets/product_card_mini.dart';
 import '../widgets/coupon_card.dart';
 
+/// Offers page — shows ALL products that currently have an offer as a full
+/// product grid (same card as the homepage grid), followed by any coupons.
+/// The old promotional "Offers & Deals" cards + heading were removed in favour
+/// of showing the actual discounted products.
 class OffersScreen extends StatefulWidget {
   const OffersScreen({super.key});
 
@@ -17,12 +21,34 @@ class OffersScreen extends StatefulWidget {
 }
 
 class _OffersScreenState extends State<OffersScreen> {
+  final ProductService _productService = ProductService();
+  List<Product> _saleProducts = [];
+  bool _loadingProducts = true;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Coupons still come from the offer provider.
       context.read<OfferProvider>().loadOffers();
+      _loadSaleProducts();
     });
+  }
+
+  Future<void> _loadSaleProducts() async {
+    try {
+      // Includes products whose offer lives on a variant (e.g. vivo 7), not
+      // just product-level discounts.
+      final products = await _productService.getOfferProducts();
+      if (mounted) {
+        setState(() {
+          _saleProducts = products;
+          _loadingProducts = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingProducts = false);
+    }
   }
 
   @override
@@ -49,215 +75,81 @@ class _OffersScreenState extends State<OffersScreen> {
           child: Divider(height: 1, color: Color(0xFFE2E8F0)),
         ),
       ),
-      body: Consumer<OfferProvider>(
-        builder: (context, offerProvider, _) {
-          if (offerProvider.isLoading) {
-            return const Center(
+      body: _loadingProducts
+          ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
-            );
-          }
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ---- Offers & Deals section ----
-                const Text(
-                  'Offers & Deals',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                if (offerProvider.activeOffers.isEmpty)
-                  _buildEmptyState(
-                    icon: Icons.local_offer_outlined,
-                    message: 'No active offers right now',
-                  )
-                else
-                  ...offerProvider.activeOffers.map(
-                    (offer) => _buildOfferCard(offer),
-                  ),
-
-                const SizedBox(height: AppSpacing.xl),
-
-                // ---- Coupons section ----
-                const Text(
-                  'Coupons',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                if (offerProvider.activeCoupons.isEmpty)
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                    child: Center(
-                      child: Text(
-                        'No coupons available',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
+            )
+          : CustomScrollView(
+              slivers: [
+                if (_saleProducts.isEmpty)
+                  SliverToBoxAdapter(
+                    child: _buildEmptyState(
+                      icon: Icons.local_offer_outlined,
+                      message: 'No products on offer right now',
                     ),
                   )
                 else
-                  ...offerProvider.activeCoupons.map(
-                    (coupon) => CouponCard(coupon: coupon),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(12, 16, 12, 8),
+                    sliver: SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        childAspectRatio: 0.55,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => ProductCardMini(product: _saleProducts[i]),
+                        childCount: _saleProducts.length,
+                      ),
+                    ),
                   ),
 
-                const SizedBox(height: AppSpacing.xl),
+                // ---- Coupons (kept) ----
+                SliverToBoxAdapter(child: _buildCoupons()),
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
               ],
             ),
-          );
-        },
-      ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Offer card
-  // ---------------------------------------------------------------------------
-  Widget _buildOfferCard(Offer offer) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-      ),
-      elevation: 0,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title row with discount badge
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        offer.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (offer.description != null) ...[
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          offer.description!,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                // Discount badge (orange background)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sm,
-                    vertical: AppSpacing.xs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent,
-                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-                  ),
-                  child: Text(
-                    offer.discountLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: AppSpacing.md),
-
-            // Validity
-            Row(
-              children: [
-                const Icon(
-                  Icons.schedule,
-                  size: 14,
-                  color: AppColors.textHint,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  'Valid till ${DateFormat('dd MMM yyyy').format(offer.endDate)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textHint,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: AppSpacing.md),
-
-            // Shop Now button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                // Previously a no-op, so tapping an offer showed nothing. Take
-                // the user to the product listing so they can shop the deal.
-                onPressed: () => context.push('/shop/products'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppSpacing.radiusMd),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                ),
-                child: const Text(
-                  'Shop Now',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
+  Widget _buildCoupons() {
+    return Consumer<OfferProvider>(
+      builder: (context, offerProvider, _) {
+        if (offerProvider.activeCoupons.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding, AppSpacing.lg, AppSpacing.pagePadding, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Coupons',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: AppSpacing.md),
+              ...offerProvider.activeCoupons.map(
+                (coupon) => CouponCard(coupon: coupon),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Empty state for offers
-  // ---------------------------------------------------------------------------
   Widget _buildEmptyState({
     required IconData icon,
     required String message,
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl * 2),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [

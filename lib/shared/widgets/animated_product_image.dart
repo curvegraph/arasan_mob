@@ -23,8 +23,14 @@ class AnimatedProductImage extends StatefulWidget {
   State<AnimatedProductImage> createState() => _AnimatedProductImageState();
 }
 
+// Uses [TickerProviderStateMixin] (not Single*) because [didUpdateWidget]
+// disposes and recreates the controller whenever a card's animation changes —
+// and sliver element recycling during scroll reuses this State with a new
+// widget config. SingleTickerProviderStateMixin permits only one ticker for the
+// State's whole lifetime, so the second controller threw "multiple tickers were
+// created" and crashed the homepage on scroll.
 class _AnimatedProductImageState extends State<AnimatedProductImage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   AnimationController? _ctrl;
 
   @override

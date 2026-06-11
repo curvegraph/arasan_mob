@@ -60,6 +60,16 @@ class _UserScaffoldState extends State<UserScaffold> {
     final isHomeTab = path == '/shop';
     final canShellPop = router.canPop();
 
+    // The global brand header + inline search bar appear ONLY on the
+    // product-browsing surfaces: the home page and the product listing
+    // (`/shop/products`, incl. category/brand filters). Every other page —
+    // cart, checkout, account, orders, wishlist, offers, etc. — already has its
+    // own header, so the global chrome there was just redundant clutter. The
+    // product detail page keeps its own compact header (back + search + cart)
+    // so a customer can search for another product from there.
+    final isProductBrowsing =
+        path == '/shop' || path.startsWith('/shop/products');
+
     return PopScope(
       // Let the system pop normally when the shell navigator has something to
       // pop (deep screens reached via context.push). Intercept only when we're
@@ -95,7 +105,10 @@ class _UserScaffoldState extends State<UserScaffold> {
           children: [
             if (isProductDetail)
               const _ProductDetailHeader()
-            else ...[
+            // Desktop keeps the global header everywhere (it carries the
+            // cart/account nav). On mobile, show it only on product-browsing
+            // surfaces; other mobile pages have their own headers.
+            else if (!isMobile || isProductBrowsing) ...[
               const UserAppBar(),
               if (showSearchBar) const SearchBarButton(),
             ],

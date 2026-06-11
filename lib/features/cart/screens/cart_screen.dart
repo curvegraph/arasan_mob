@@ -419,7 +419,11 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F8),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        // Add the status-bar inset to the top padding so the "Order Summary"
+        // heading sits below the notch (this page has no app bar, and the
+        // global header is suppressed on non-browsing pages).
+        padding: EdgeInsets.fromLTRB(
+            16, MediaQuery.paddingOf(context).top + 16, 16, 28),
         children: [
           // Header
           Row(
@@ -436,7 +440,7 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                           color: AppColors.primary,
                           letterSpacing: 1.0)),
                   const SizedBox(height: 2),
-                  const Text('Shopping Cart',
+                  const Text('Order Summary',
                       style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w900,

@@ -332,7 +332,11 @@ class _DealProductCardState extends State<_DealProductCard> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: () => context.push('/shop/product/${p.id}'),
+        onTap: () => context.push(
+          p.selectedVariantId == null
+              ? '/shop/product/${p.id}'
+              : '/shop/product/${p.id}?variant=${p.selectedVariantId}',
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           transform: Matrix4.identity()..translate(0.0, _hovered ? -2.0 : 0.0),

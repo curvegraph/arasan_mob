@@ -89,7 +89,11 @@ class _ProductCardMiniState extends State<ProductCardMini> {
         _hoverIndex = 0;
       }),
       child: GestureDetector(
-        onTap: () => context.push('/shop/product/${p.id}'),
+        onTap: () => context.push(
+          p.selectedVariantId == null
+              ? '/shop/product/${p.id}'
+              : '/shop/product/${p.id}?variant=${p.selectedVariantId}',
+        ),
         child: Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
@@ -143,6 +147,13 @@ class _ProductCardMiniState extends State<ProductCardMini> {
                         letterSpacing: -0.1,
                       ),
                     ),
+                    // Admin-chosen variant identity (colour · storage) for
+                    // homepage variant-offer cards, so the shopper sees which
+                    // variant the offer is for.
+                    if ((p.variantLabel ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      _buildVariantChip(p.variantLabel!.trim()),
+                    ],
                     const SizedBox(height: 3),
                     _buildPriceRow(p, discount),
                     // No savings row here — the discount is already shown as the
@@ -410,6 +421,28 @@ class _ProductCardMiniState extends State<ProductCardMini> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildVariantChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: _brandColor.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: _brandColor.withOpacity(0.18)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: _brandColor,
+          letterSpacing: 0.1,
+        ),
+      ),
     );
   }
 
