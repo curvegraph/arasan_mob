@@ -103,10 +103,10 @@ class CategoriesSection extends StatelessWidget {
               child: _buildListLayout(context, categories, itemShape),
             )
           else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildGrid(context, categories, columns, itemShape),
-            ),
+            // No outer padding — _buildGrid handles its own padding so the
+            // mobile horizontal list can use the full screen width and
+            // half-peek the next tile at the edge.
+            _buildGrid(context, categories, columns, itemShape),
         ],
       ),
     );
@@ -115,29 +115,34 @@ class CategoriesSection extends StatelessWidget {
   Widget _buildGrid(BuildContext context, List<CategoryData> categories, int columns, String shape) {
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 768;
-    // Bigger tiles on mobile so the full category image is legible.
-    final tileWidth = isWide ? 120.0 : 78.0;
-
-    final visible = categories.take(14).toList();
 
     if (!isWide) {
+      // Mobile: size tiles so exactly 5.5 fit on screen, so the 6th peeks past
+      // the right edge as a "swipe for more" hint. No take() cap — all
+      // categories are reachable by horizontal scroll.
+      const separator = 10.0;
+      const leftPad = 12.0;
+      final tileWidth = (width - leftPad - 5 * separator) / 5.5;
       return SizedBox(
-        height: tileWidth + 34,
+        height: tileWidth + 30,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          itemCount: visible.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          padding: const EdgeInsets.fromLTRB(leftPad, 0, 0, 0),
+          itemCount: categories.length,
+          separatorBuilder: (_, __) => const SizedBox(width: separator),
           itemBuilder: (_, i) => SizedBox(
             width: tileWidth,
-            child: _CategoryItem(category: visible[i], index: i, shape: shape, compact: true),
+            child: _CategoryItem(category: categories[i], index: i, shape: shape, compact: true),
           ),
         ),
       );
     }
 
+    final tileWidth = 120.0;
+    final visible = categories.take(14).toList();
+
     return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Wrap(
         spacing: 28,
         runSpacing: 18,

@@ -92,43 +92,33 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
         onRefresh: () async {
           await homepageProvider.refresh();
         },
-        child: Scrollbar(
-                controller: _scrollController,
-                thumbVisibility: true,
-                thickness: 8,
-                radius: const Radius.circular(4),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-                    // Mobile goes edge-to-edge — each section handles its own
-                    // internal padding where needed (e.g. category labels,
-                    // product cards). Web/tablet keeps svelte's container scale:
-                    //   sm:px-6 / lg:px-10 / xl:px-14
-                    final hPad = width >= 1280
-                        ? 56.0
-                        : width >= 1024
-                            ? 40.0
-                            : width >= 640
-                                ? 24.0
-                                : 0.0;
-                    return CustomScrollView(
-                      controller: _scrollController,
-                      cacheExtent: 4000,
-                      physics: const ClampingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
-                      ),
-                      slivers: [
-                        SliverPadding(
-                          padding: EdgeInsets.symmetric(horizontal: hPad),
-                          sliver: SliverMainAxisGroup(
-                            slivers: _buildSliverSections(sections),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final hPad = width >= 1280
+                ? 56.0
+                : width >= 1024
+                    ? 40.0
+                    : width >= 640
+                        ? 24.0
+                        : 0.0;
+            return CustomScrollView(
+              controller: _scrollController,
+              cacheExtent: 4000,
+              physics: const ClampingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
               ),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: hPad),
+                  sliver: SliverMainAxisGroup(
+                    slivers: _buildSliverSections(sections),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

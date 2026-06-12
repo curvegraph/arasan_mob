@@ -125,41 +125,41 @@ class _ProductCardMiniState extends State<ProductCardMini> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildImage(images, imageCount, discount, outOfStock),
+              // Compact body — CTA bar sits directly under the price with no
+              // Spacer. Name is reserved at 2 lines so cards on the same row
+              // stay aligned regardless of title length, but the extra line is
+              // tight (fontSize 12) so a 1-line name doesn't create a big gap.
               Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (p.brand.isNotEmpty || hasRating) _buildBrandRow(p, hasRating),
-                    const SizedBox(height: 3),
-                    // Name sized to its content (1–2 lines) and the price sits
-                    // directly under it — no reserved blank line / gap.
+                    const SizedBox(height: 2),
+                    // Single line + ellipsis — every card has the same content
+                    // height regardless of title length, so CTAs align across
+                    // the row with no reserved blank space anywhere. Long
+                    // titles truncate; the full name is on the detail page.
                     Text(
                       p.name,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF1A1A1A),
-                        height: 1.25,
+                        height: 1.2,
                         letterSpacing: -0.1,
                       ),
                     ),
-                    // Admin-chosen variant identity (colour · storage) for
-                    // homepage variant-offer cards, so the shopper sees which
-                    // variant the offer is for.
                     if ((p.variantLabel ?? '').trim().isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       _buildVariantChip(p.variantLabel!.trim()),
                     ],
                     const SizedBox(height: 3),
                     _buildPriceRow(p, discount),
-                    // No savings row here — the discount is already shown as the
-                    // badge on the image, so there's no empty space between the
-                    // price and the Add/Buy buttons.
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 5),
                     _buildCTABar(outOfStock, isWishlisted),
                   ],
                 ),
@@ -454,7 +454,7 @@ class _ProductCardMiniState extends State<ProductCardMini> {
         Text(
           CurrencyFormatter.format(p.effectivePrice),
           style: const TextStyle(
-            fontSize: 17,
+            fontSize: 15,
             fontWeight: FontWeight.w900,
             color: Color(0xFF1A1A1A),
             height: 1.0,
@@ -463,11 +463,11 @@ class _ProductCardMiniState extends State<ProductCardMini> {
         ),
         if (discount > 0)
           Padding(
-            padding: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.only(bottom: 1),
             child: Text(
               CurrencyFormatter.format(p.price),
               style: const TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 color: Color(0xFFCBD5E1),
                 decoration: TextDecoration.lineThrough,
               ),
@@ -484,7 +484,7 @@ class _ProductCardMiniState extends State<ProductCardMini> {
           child: GestureDetector(
             onTap: outOfStock ? null : _addToCart,
             child: Container(
-              height: 36,
+              height: 30,
               decoration: BoxDecoration(
                 color: _justAdded ? _success.withOpacity(0.10) : Colors.white,
                 borderRadius: BorderRadius.circular(999),
@@ -534,7 +534,7 @@ class _ProductCardMiniState extends State<ProductCardMini> {
           child: GestureDetector(
             onTap: outOfStock ? null : _buyNow,
             child: Container(
-              height: 36,
+              height: 30,
               decoration: BoxDecoration(
                 gradient: outOfStock
                     ? null

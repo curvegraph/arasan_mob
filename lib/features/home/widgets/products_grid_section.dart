@@ -297,9 +297,9 @@ class SliverProductsGridSectionState extends State<SliverProductsGridSection> {
   // savings pill, and the dual Add/Buy CTA bar. Desktop has more breathing
   // room so we keep the original ratio there.
   double _getChildAspectRatio(int crossAxisCount) {
-    if (crossAxisCount >= 4) return 0.58;
-    if (crossAxisCount == 3) return 0.55;
-    return 0.55;
+    if (crossAxisCount >= 4) return 0.66;
+    if (crossAxisCount == 3) return 0.64;
+    return 0.62;
   }
 
   /// Shimmer skeleton grid shown while products are loading
@@ -616,9 +616,9 @@ class ProductsGridSectionState extends State<ProductsGridSection> {
   }
 
   double _getChildAspectRatio(int crossAxisCount) {
-    if (crossAxisCount >= 4) return 0.58;
-    if (crossAxisCount == 3) return 0.55;
-    return 0.55;
+    if (crossAxisCount >= 4) return 0.66;
+    if (crossAxisCount == 3) return 0.64;
+    return 0.62;
   }
 
   /// Shimmer skeleton grid shown while products are loading
