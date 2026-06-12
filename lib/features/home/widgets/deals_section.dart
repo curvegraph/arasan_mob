@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../data/models/product.dart';
-import '../../../data/services/product_service.dart';
 import '../../../providers/homepage_provider.dart';
 import '../../../shared/widgets/animated_product_image.dart';
 
@@ -38,17 +37,14 @@ class _DealsSectionState extends State<DealsSection> {
   late final ScrollController _scrollController;
   bool _visible = true;
 
-  // Products loaded directly (not from productProvider.allProducts)
-  final ProductService _productService = ProductService();
+  // Backend-resolved deal products, rendered directly. Every caller (the home
+  // screen) supplies them; the HomepageProvider refresh feeds updates through
+  // didUpdateWidget — no per-section fetch/poll.
   List<Product> _dealsProducts = [];
-  bool _isLoadingProducts = true;
-  Timer? _productsPollTimer;
 
   // Section-specific timer config
   DateTime? _endTime;
   bool _showTimer = false;
-
-  bool get _useEmbedded => widget.initialProducts != null;
 
   @override
   void initState() {
@@ -56,31 +52,15 @@ class _DealsSectionState extends State<DealsSection> {
     _scrollController = ScrollController();
     _parseTimerConfig();
     _startCountdown();
-
-    if (_useEmbedded) {
-      // Render the backend-resolved products directly — no fetch/poll needed;
-      // the homepage provider refresh feeds updates via didUpdateWidget.
-      _dealsProducts = List.of(widget.initialProducts!);
-      _isLoadingProducts = false;
-    } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _loadDealProducts();
-      });
-      // Polling-based refresh (Socket.IO bridge will replace this).
-      _productsPollTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-        if (mounted) _loadDealProducts();
-      });
-    }
+    _dealsProducts = List.of(widget.initialProducts ?? const <Product>[]);
   }
 
   @override
   void didUpdateWidget(covariant DealsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_useEmbedded &&
-        !identical(widget.initialProducts, oldWidget.initialProducts)) {
+    if (!identical(widget.initialProducts, oldWidget.initialProducts)) {
       setState(() {
-        _dealsProducts = List.of(widget.initialProducts!);
-        _isLoadingProducts = false;
+        _dealsProducts = List.of(widget.initialProducts ?? const <Product>[]);
       });
     }
   }
@@ -114,55 +94,7 @@ class _DealsSectionState extends State<DealsSection> {
     _countdownTimer.cancel();
     _scrollController.dispose();
     _timeLeftNotifier.dispose();
-    _productsPollTimer?.cancel();
-    _productsPollTimer = null;
     super.dispose();
-  }
-
-  /// Fetch only the products needed for this deals section
-  Future<void> _loadDealProducts() async {
-    final homepageProvider = context.read<HomepageProvider>();
-    final flashDeal = homepageProvider.flashDeal;
-    final section = homepageProvider.getSectionByKey(widget.sectionKey);
-    final maxItems = section?.maxItems ?? 10;
-
-    List<Product> products = [];
-
-    try {
-      // Check section config for selected product IDs
-      final selectedProductIds = (widget.config?['selected_product_ids'] as List<dynamic>?)
-          ?.map((e) => e.toString())
-          .toList();
-
-      if (selectedProductIds != null && selectedProductIds.isNotEmpty) {
-        products = await _productService.getProductsByIds(selectedProductIds);
-        products = products.take(maxItems).toList();
-      } else if (flashDeal != null && flashDeal.isActive) {
-        if (flashDeal.productIds.isNotEmpty) {
-          products = await _productService.getProductsByIds(flashDeal.productIds);
-          products = products.take(maxItems).toList();
-        } else if (flashDeal.filterType == 'category' && flashDeal.filterValue != null) {
-          products = await _productService.getProductsByCategoryLimited(
-            flashDeal.filterValue!,
-            limit: maxItems,
-          );
-        } else if (flashDeal.filterType == 'brand' && flashDeal.filterValue != null) {
-          products = await _productService.getProductsByBrandLimited(
-            flashDeal.filterValue!,
-            limit: maxItems,
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('[DealsSection] Error loading products: $e');
-    }
-
-    if (mounted) {
-      setState(() {
-        _dealsProducts = products;
-        _isLoadingProducts = false;
-      });
-    }
   }
 
   void setVisible(bool visible) {
@@ -220,7 +152,7 @@ class _DealsSectionState extends State<DealsSection> {
             defaultTitle;
     final showTimer = !isToday;
 
-    if (_isLoadingProducts || _dealsProducts.isEmpty) {
+    if (_dealsProducts.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -491,9 +423,14 @@ class _TimerBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final h = timeLeft.inHours.toString().padLeft(2, '0');
+    // Mirror the web flash-deals countdown: show a leading "Nd" segment for
+    // multi-day deals (so a 2-day deal reads "2d 00:00:00", not "48:00:00"),
+    // then roll hours back to 0–23.
+    final d = timeLeft.inDays;
+    final h = (timeLeft.inHours % 24).toString().padLeft(2, '0');
     final m = (timeLeft.inMinutes % 60).toString().padLeft(2, '0');
     final s = (timeLeft.inSeconds % 60).toString().padLeft(2, '0');
+    final label = d > 0 ? '${d}d $h:$m:$s' : '$h:$m:$s';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -507,7 +444,7 @@ class _TimerBadge extends StatelessWidget {
           const Icon(Icons.timer_outlined, size: 14, color: Colors.white),
           const SizedBox(width: 4),
           Text(
-            '$h:$m:$s',
+            label,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
