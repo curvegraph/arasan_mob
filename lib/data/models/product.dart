@@ -147,6 +147,13 @@ class Product {
   /// All selectable variants (colour + storage/RAM). Only populated by the
   /// product-detail fetch; empty in lightweight list responses.
   final List<ProductVariant> variants;
+  /// The product's own colour (e.g. "Blue"). Combined with [specs] storage/RAM
+  /// to show a variant-detail chip on homepage cards.
+  final String? color;
+  /// True when the product has selectable variants. Set by the backend on
+  /// homepage cards so the card can show the variant-detail chip only for
+  /// products that actually have variants.
+  final bool hasVariants;
 
   Product({
     required this.id,
@@ -173,6 +180,8 @@ class Product {
     this.selectedVariantId,
     this.variantLabel,
     this.variants = const [],
+    this.color,
+    this.hasVariants = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   Product copyWith({
@@ -280,6 +289,11 @@ class Product {
               .map((e) => ProductVariant.fromJson(Map<String, dynamic>.from(e)))
               .toList() ??
           const [],
+      color: json['color']?.toString(),
+      // Backend tags homepage cards with this; also infer from an embedded
+      // variants list when present.
+      hasVariants: json['has_variants'] == true ||
+          (json['variants'] is List && (json['variants'] as List).isNotEmpty),
     );
   }
 

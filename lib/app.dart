@@ -22,14 +22,13 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
 
-    // Wait for auth to initialize before showing the app
-    // This ensures auto-login completes before routing decisions are made
+    // Wait for auth to initialize before showing the app (auto-login must
+    // finish before routing). No branded splash — just a plain screen during
+    // the brief init so the app appears to open straight to the home page.
     if (!authProvider.isInitialized) {
-      return MaterialApp(
-        title: 'Arasan Mobiles',
+      return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        home: const _SplashScreen(),
+        home: Scaffold(backgroundColor: Colors.white),
       );
     }
 
@@ -69,50 +68,3 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
   }
 }
 
-/// Splash screen shown while auth is initializing
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // App logo/icon
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                Icons.phone_android,
-                size: 50,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Arasan Mobiles',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            const SizedBox(height: 32),
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

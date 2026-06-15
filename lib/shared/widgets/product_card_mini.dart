@@ -153,9 +153,9 @@ class _ProductCardMiniState extends State<ProductCardMini> {
                         letterSpacing: -0.1,
                       ),
                     ),
-                    if ((p.variantLabel ?? '').trim().isNotEmpty) ...[
+                    if (_variantInfoLabel(p).isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      _buildVariantChip(p.variantLabel!.trim()),
+                      _buildVariantChip(_variantInfoLabel(p)),
                     ],
                     const SizedBox(height: 3),
                     _buildPriceRow(p, discount),
@@ -424,6 +424,16 @@ class _ProductCardMiniState extends State<ProductCardMini> {
     );
   }
 
+  /// Text for the variant-detail chip:
+  ///  - a pinned variant's label when the admin curated one, else
+  ///  - the product's own colour · storage · RAM, but ONLY for products that
+  ///    actually have variants (so a plain no-variant product stays chip-less).
+  /// The variant-detail chip text. The backend resolves this per card — a
+  /// pinned variant's label, OR (for products that have variants but no admin
+  /// pick) the parent product's own colour · storage · RAM. The app just shows
+  /// whatever the backend sent, as-is.
+  String _variantInfoLabel(Product p) => (p.variantLabel ?? '').trim();
+
   Widget _buildVariantChip(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -648,7 +658,7 @@ class _DiscountTag extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '-$percent%',
+                '$percent%',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,

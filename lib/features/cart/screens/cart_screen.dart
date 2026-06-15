@@ -240,11 +240,10 @@ class CartScreen extends StatelessWidget {
               children: [
                 Column(
                   children: [
-                    // Breadcrumb
-                    _buildBreadcrumb(context),
-                    // Title
+                    // Title (no breadcrumb band)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(40, 20, 40, 0),
+                      padding: EdgeInsets.fromLTRB(
+                          40, MediaQuery.paddingOf(context).top + 20, 40, 0),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -294,46 +293,34 @@ class CartScreen extends StatelessWidget {
   Widget _buildNarrowLayout(BuildContext context, Cart cart, CartProvider cartProvider) {
     return ListView(
       children: [
-        _buildBreadcrumb(context),
+        // Just the "Shopping Cart" heading — no blue breadcrumb band, no
+        // "YOUR SELECTION" eyebrow. Status-bar inset added to the top padding
+        // since this screen has no app bar.
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: EdgeInsets.fromLTRB(
+              16, MediaQuery.paddingOf(context).top + 16, 16, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                'YOUR SELECTION',
+              const Text(
+                'Shopping Cart',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 26,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.primary,
-                  letterSpacing: 1.0,
+                  color: Color(0xFF1A1A1A),
+                  letterSpacing: -0.6,
+                  height: 1.0,
                 ),
               ),
-              const SizedBox(height: 2),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  const Text(
-                    'Shopping Cart',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF1A1A1A),
-                      letterSpacing: -0.6,
-                      height: 1.0,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '· ${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              Text(
+                '· ${cart.itemCount} item${cart.itemCount == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF64748B),
+                ),
               ),
             ],
           ),
@@ -348,46 +335,6 @@ class CartScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
       ],
-    );
-  }
-
-  Widget _buildBreadcrumb(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      color: AppColors.primary,
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => context.go('/shop'),
-            child: const Text('Home', style: TextStyle(fontSize: 13, color: Colors.white70)),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 6),
-            child: Icon(Icons.chevron_right, size: 16, color: Colors.white54),
-          ),
-          const Text('Cart', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => context.go('/shop'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white54),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add, size: 14, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text('Continue Shopping', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -630,9 +577,10 @@ class _OrderSummaryScreenState extends State<OrderSummaryScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      // Only now does it enter the cart, then on to checkout.
-                      context.read<CartProvider>().addToCart(p, quantity: _qty);
-                      context.push('/shop/checkout');
+                      // Buy-Now: check out THIS product only — pass it to
+                      // checkout via `extra` instead of adding to the cart, so
+                      // existing cart items aren't folded into the order.
+                      context.push('/shop/checkout', extra: (p, _qty));
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -741,9 +689,14 @@ class _CartItemCardState extends State<_CartItemCard> {
     }
     context.read<WishlistProvider>().toggleWishlist(item.product.id);
     widget.cartProvider.removeFromCart(item.id);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    // Clear any lingering snackbar first so it doesn't stack / linger onto the
+    // next screen, and auto-dismiss quickly.
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
       content: Text('${item.product.name} moved to wishlist'),
       behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ));
   }
@@ -751,9 +704,14 @@ class _CartItemCardState extends State<_CartItemCard> {
   void _removeItem(BuildContext context) {
     final item = widget.item;
     widget.cartProvider.removeFromCart(item.id);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    // A fresh remove replaces the previous toast so two quick removals don't
+    // pile up, and the toast clears itself instead of riding onto the next page.
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
       content: Text('${item.product.name} removed'),
       behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       action: SnackBarAction(
         label: 'Undo',
@@ -840,6 +798,12 @@ class _CartItemCardState extends State<_CartItemCard> {
                   Text(item.product.name,
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
                       maxLines: 2, overflow: TextOverflow.ellipsis),
+                  // Selected variant (colour · storage · RAM) so the shopper
+                  // sees exactly which variant is in the cart.
+                  if ((item.product.variantLabel ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    _VariantChip(label: item.product.variantLabel!.trim()),
+                  ],
                   const SizedBox(height: 4),
                   Row(
                     children: [
@@ -1142,9 +1106,11 @@ class _ProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Square tile so the real product photo sits fully inside the card and
+    // never overflows / overlaps the text column beside it.
     return Container(
       width: size,
-      height: size * 1.1,
+      height: size,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -1162,8 +1128,40 @@ class _ProductImage extends StatelessWidget {
         child: ImagePlaceholder(
           imageUrl: imageUrl,
           width: size,
-          height: size * 1.1,
+          height: size,
+          fit: BoxFit.cover,
           icon: Icons.phone_android,
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Variant Chip — selected colour · storage · RAM
+// ═══════════════════════════════════════════════════════════════════════════
+class _VariantChip extends StatelessWidget {
+  final String label;
+  const _VariantChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: AppColors.primary,
+          letterSpacing: 0.1,
         ),
       ),
     );

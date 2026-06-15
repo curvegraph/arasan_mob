@@ -10,6 +10,8 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../../core/utils/order_error_messages.dart';
 import '../../../data/models/address.dart';
 import '../../../data/models/order.dart';
+import '../../../data/models/cart.dart';
+import '../../../data/models/product.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/checkout_provider.dart';
@@ -60,13 +62,40 @@ const _indianStates = [
 ];
 
 class UserCheckoutScreen extends StatefulWidget {
-  const UserCheckoutScreen({super.key});
+  /// When set, this is a standalone "Buy Now" checkout for THIS product only —
+  /// the existing cart is ignored so cart items never get folded into the
+  /// order (qty stays exactly what the user chose on the Order Summary page).
+  final Product? buyNowProduct;
+  final int buyNowQty;
+
+  const UserCheckoutScreen({
+    super.key,
+    this.buyNowProduct,
+    this.buyNowQty = 1,
+  });
 
   @override
   State<UserCheckoutScreen> createState() => _UserCheckoutScreenState();
 }
 
 class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
+  /// The items actually being purchased: just the Buy-Now product when this is
+  /// a Buy-Now checkout, otherwise the live cart's active items.
+  List<CartItem> _effectiveItems(Cart cart) {
+    final p = widget.buyNowProduct;
+    if (p != null) {
+      return [CartItem(id: 'buynow', product: p, quantity: widget.buyNowQty)];
+    }
+    return cart.activeItems;
+  }
+
+  double _effectiveSubtotal(Cart cart) =>
+      _effectiveItems(cart).fold(0.0, (s, i) => s + i.totalPrice);
+
+  /// Coupons only apply to the cart flow — a Buy-Now never carries one.
+  double _effectiveCoupon(Cart cart) =>
+      widget.buyNowProduct != null ? 0 : cart.couponDiscount;
+
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -213,8 +242,8 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
       if (mounted) setState(() => _isSaving = false);
     }
 
-    // Build items list
-    final orderItems = cart.activeItems.map((item) {
+    // Build items list — Buy-Now uses only the chosen product, never the cart.
+    final orderItems = _effectiveItems(cart).map((item) {
       return {
         'product_id': item.product.id,
         'quantity': item.quantity,
@@ -232,7 +261,11 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           items: orderItems,
           customerName: address.fullName,
           customerEmail: authProvider.userEmail,
-          customerPhone: address.phone,
+          // Prefer the number the user typed in the Contact field; fall back to
+          // the saved address's phone when they left it untouched.
+          customerPhone: _phoneController.text.trim().length == 10
+              ? '+91 ${_phoneController.text.trim()}'
+              : address.phone,
           shippingAddressLine1: address.addressLine1,
           shippingCity: address.city,
           shippingState: address.state,
@@ -242,7 +275,8 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           deliveryOption: deliveryOption,
         );
 
-        cartProvider.clearCart();
+        // A Buy-Now order never touched the cart, so leave the cart intact.
+        if (widget.buyNowProduct == null) cartProvider.clearCart();
         if (mounted) {
           context.go('/shop/order-success/$orderNumber');
         }
@@ -332,7 +366,8 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
         );
 
         if (orderData != null && mounted) {
-          cartProvider.clearCart();
+          // Buy-Now never added to the cart, so don't wipe it.
+          if (widget.buyNowProduct == null) cartProvider.clearCart();
           checkout.reset();
           context.go('/shop/order-success/${orderData['order_number']}');
         } else if (mounted) {
@@ -371,48 +406,14 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
       },
       child: Scaffold(
         backgroundColor: AppColors.background,
-        body: Column(
-          children: [
-            // Breadcrumb header
-            Container(
-              width: double.infinity,
-              // Extend behind the status bar (no app bar here, and the global
-              // header is suppressed on non-browsing pages) so the breadcrumb
-              // text isn't tucked under the notch.
-              padding: EdgeInsets.fromLTRB(
-                  20, MediaQuery.paddingOf(context).top + 12, 20, 12),
-              color: AppColors.primary,
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => context.go('/shop'),
-                    child: const Text('Home', style: TextStyle(fontSize: 13, color: Colors.white70)),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.chevron_right, size: 16, color: Colors.white54),
-                  ),
-                  GestureDetector(
-                    onTap: () => context.go('/shop/cart'),
-                    child: const Text('Cart', style: TextStyle(fontSize: 13, color: Colors.white70)),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.chevron_right, size: 16, color: Colors.white54),
-                  ),
-                  const Text('Checkout', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-                ],
-              ),
-            ),
-            // Body
-            Expanded(
-              child: checkoutProvider.isProcessing
-            ? _buildProcessingOverlay()
-            : isWide
-                ? _buildWideLayout(cart, checkoutProvider)
-                : _buildNarrowLayout(cart, checkoutProvider),
-            ),
-          ],
+        // No header at all — the "Checkout" title sits at the top of the
+        // scrollable form. SafeArea keeps it clear of the status bar / notch.
+        body: SafeArea(
+          child: checkoutProvider.isProcessing
+              ? _buildProcessingOverlay()
+              : isWide
+                  ? _buildWideLayout(cart, checkoutProvider)
+                  : _buildNarrowLayout(cart, checkoutProvider),
         ),
       ),
     );
@@ -451,9 +452,18 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.userPagePadding),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Breadcrumb
-          _buildBreadcrumb(),
+          // Just the page title — no "Home > Your shopping cart > Checkout".
+          const Text(
+            'Checkout',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              letterSpacing: -0.4,
+            ),
+          ),
           const SizedBox(height: 20),
           // Order Summary (Products) at top on mobile
           _buildOrderSummary(cart, checkoutProvider),
@@ -466,43 +476,6 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           const SizedBox(height: 24),
         ],
       ),
-    );
-  }
-
-  Widget _buildBreadcrumb() {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () => context.go('/shop'),
-          child: const Text(
-            'Home',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
-        ),
-        GestureDetector(
-          onTap: () => context.go('/shop/cart'),
-          child: const Text(
-            'Your shopping cart',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 6),
-          child: Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
-        ),
-        const Text(
-          'Checkout',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.primary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 
@@ -562,7 +535,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
               if (v.trim().length < 10) return 'Enter valid 10-digit number';
               return null;
             },
-            enabled: !_useSavedAddress,
+            enabled: true,
           ),
 
           const SizedBox(height: 16),
@@ -780,7 +753,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
               if (v.trim().length < 10) return 'Enter valid 10-digit number';
               return null;
             },
-            enabled: !_useSavedAddress,
+            enabled: true,
           ),
 
           const SizedBox(height: 28),
@@ -1414,13 +1387,17 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     final cartProvider = context.watch<CartProvider>();
     final settings = context.watch<StoreSettingsProvider>();
     final cartData = cartProvider.cart;
-    final standardDelivery = settings.deliveryChargeFor(cartData.subtotal);
+    // Buy-Now → just the chosen product; otherwise the live cart.
+    final items = _effectiveItems(cartData);
+    final subtotal = _effectiveSubtotal(cartData);
+    final coupon = _effectiveCoupon(cartData);
+    final standardDelivery = settings.deliveryChargeFor(subtotal);
     final deliveryCharge =
         checkoutProvider.deliveryOption == DeliveryOption.express
             ? standardDelivery + checkoutProvider.expressSurcharge
             : standardDelivery;
-    final tax = settings.taxFor(cartData.subtotal);
-    final total = cartData.subtotal - cartData.couponDiscount + deliveryCharge + tax;
+    final tax = settings.taxFor(subtotal);
+    final total = subtotal - coupon + deliveryCharge + tax;
 
     return Container(
       decoration: BoxDecoration(
@@ -1445,7 +1422,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Products',
+                  'Order Summary',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -1460,7 +1437,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${cartData.activeItems.length}'.padLeft(2, '0'),
+                    '${items.length}'.padLeft(2, '0'),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -1475,7 +1452,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           const SizedBox(height: 16),
 
           // Product items
-          ...cartData.activeItems.map(
+          ...items.map(
             (item) => _buildProductItem(item),
           ),
 
@@ -1493,13 +1470,13 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
               children: [
                 _buildPriceRow(
                   'Subtotal',
-                  CurrencyFormatter.format(cartData.subtotal),
+                  CurrencyFormatter.format(subtotal),
                 ),
-                if (cartData.couponDiscount > 0) ...[
+                if (coupon > 0) ...[
                   const SizedBox(height: 8),
                   _buildPriceRow(
                     'Coupon Discount',
-                    '- ${CurrencyFormatter.format(cartData.couponDiscount)}',
+                    '- ${CurrencyFormatter.format(coupon)}',
                     valueColor: AppColors.success,
                   ),
                 ],
@@ -1507,9 +1484,8 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
                 _buildPriceRow(
                   'Shipping',
                   deliveryCharge == 0
-                      ? 'Free your address'
+                      ? 'Free'
                       : CurrencyFormatter.format(deliveryCharge),
-                  valueColor: deliveryCharge == 0 ? AppColors.success : null,
                 ),
                 if (tax > 0) ...[
                   const SizedBox(height: 8),
@@ -1609,13 +1585,49 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
               ],
             ),
           ),
-          Text(
-            CurrencyFormatter.format(item.totalPrice),
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
+          // Price block — effective price, struck original, and the offer %
+          // shown HERE (in the pricing place) as a bold, distinct-colour chip
+          // instead of a badge on the image.
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                CurrencyFormatter.format(item.totalPrice),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              if (item.product.hasDiscount) ...[
+                const SizedBox(height: 2),
+                Text(
+                  CurrencyFormatter.format(item.totalOriginalPrice),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF94A3B8),
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6D00).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${item.product.discountPercent.toInt()}% OFF',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFFFF6D00),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),

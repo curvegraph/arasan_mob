@@ -247,8 +247,19 @@ GoRouter createRouter(AuthProvider authProvider) {
           ),
           GoRoute(
             path: '/shop/checkout',
-            pageBuilder: (context, state) =>
-                _fadeSlideTransition(state, const UserCheckoutScreen()),
+            pageBuilder: (context, state) {
+              // Buy-Now passes (product, qty) via `extra`; the cart flow passes
+              // nothing, so checkout falls back to the live cart.
+              final extra = state.extra;
+              final buyNow = extra is (Product, int) ? extra : null;
+              return _fadeSlideTransition(
+                state,
+                UserCheckoutScreen(
+                  buyNowProduct: buyNow?.$1,
+                  buyNowQty: buyNow?.$2 ?? 1,
+                ),
+              );
+            },
           ),
           GoRoute(
             path: '/shop/order-success/:orderId',

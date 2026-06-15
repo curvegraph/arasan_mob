@@ -54,6 +54,24 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     return c.isEmpty ? 'Default' : c;
   }
 
+  /// A variant option that inherits the parent product's fields wherever the
+  /// admin left the variant blank — specs are key-merged ({...parent,
+  /// ...variant}), and colour / price / images fall back to the parent. OFFERS
+  /// do NOT inherit (a parent offer must not leak onto a variant). Mirrors the
+  /// web detail page's option flattening.
+  ProductVariant _mergeWithParent(Product p, ProductVariant v) {
+    return ProductVariant(
+      id: v.id,
+      color: (v.color ?? '').trim().isNotEmpty ? v.color : p.color,
+      price: v.price > 0 ? v.price : p.price,
+      offerPrice: v.offerPrice,
+      offerDiscountPercent: v.offerDiscountPercent,
+      imageUrls: v.imageUrls.isNotEmpty ? v.imageUrls : p.imageUrls,
+      stock: v.stock,
+      specs: {...p.specs, ...v.specs},
+    );
+  }
+
   // Display values that follow the currently selected variant (or the base
   // product when none is selected).
   List<String> _dispImages(Product p) {
@@ -154,18 +172,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     final width = MediaQuery.sizeOf(context).width;
     final isDesktop = width >= 768;
 
-    // Pre-select a variant once they load, so the page opens on a concrete
-    // colour + storage (matching the web). Prefer the admin-curated variant
-    // passed in (e.g. the one whose offer the user tapped on a Today's Offers
-    // card); fall back to the first variant.
-    if (!_variantInitialized && product.variants.isNotEmpty) {
+    // Pre-select a variant ONLY when the homepage explicitly pinned one (a
+    // variant-offer / Today's Offers card passed `?variant=<id>`). When nothing
+    // is pinned, the homepage showed the PARENT product's own image/price — so
+    // the PDP must open on that same parent default and must NOT jump to
+    // `variants.first` (which can be a different colour, e.g. OPPO 5G shows the
+    // blue parent on the homepage but variants.first is white). The shopper can
+    // still tap a variant to switch.
+    if (!_variantInitialized &&
+        widget.selectedVariantId != null &&
+        product.variants.isNotEmpty) {
       _variantInitialized = true;
-      final initial = widget.selectedVariantId == null
-          ? product.variants.first
-          : product.variants.firstWhere(
-              (v) => v.id == widget.selectedVariantId,
-              orElse: () => product.variants.first,
-            );
+      final initial = product.variants.firstWhere(
+        (v) => v.id == widget.selectedVariantId,
+        orElse: () => product.variants.first,
+      );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() {
@@ -849,20 +870,50 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   /// below it, the STORAGE/RAM options for the selected colour. Picking either
   /// swaps the main image, price and discount in place.
   Widget _buildVariantSelector(Product product) {
-    final variants = product.variants;
-    if (variants.isEmpty) return const SizedBox.shrink();
+    final realVariants = product.variants;
+    if (realVariants.isEmpty) return const SizedBox.shrink();
 
-    // Distinct colours, in order of appearance.
+    // Flatten into ONE option list, mirroring the web detail page: the PARENT
+    // is always the first option, then every variant — each INHERITING the
+    // parent's unfilled fields (a variant that only sets RAM still shows the
+    // parent's storage / price / image). Offers do NOT inherit. Colours dedupe
+    // for the swatches; the storage/RAM boxes are the options of the selected
+    // colour.
+    final parentOption = ProductVariant(
+      id: 'parent_${product.id}',
+      color: product.color,
+      price: product.price,
+      offerPrice: product.offerPrice,
+      offerDiscountPercent: product.offerDiscountPercent,
+      imageUrls: product.imageUrls,
+      stock: product.stock,
+      specs: product.specs,
+    );
+    final variants = <ProductVariant>[
+      parentOption,
+      ...realVariants.map((v) => _mergeWithParent(product, v)),
+    ];
+
+    // Distinct colours, in order of appearance. Merged CASE-INSENSITIVELY so an
+    // admin typo like "Sky Blue" vs "Sky blue" collapses to one swatch (web parity).
     final colours = <String>[];
+    final seenColours = <String>{};
     for (final v in variants) {
       final k = _colorKey(v);
-      if (!colours.contains(k)) colours.add(k);
+      if (seenColours.add(k.toLowerCase())) colours.add(k);
     }
-    final selectedColour = _selectedColor ?? _colorKey(variants.first);
-    final colourVariants =
-        variants.where((v) => _colorKey(v) == selectedColour).toList();
+    final selectedColour = _selectedColor ??
+        (_selectedVariant != null
+            ? _colorKey(_selectedVariant!)
+            : _colorKey(variants.first));
+    final colourVariants = variants
+        .where((v) =>
+            _colorKey(v).toLowerCase() == selectedColour.toLowerCase())
+        .toList();
     // Equal-width storage boxes — two per row.
-    final boxW = (MediaQuery.sizeOf(context).width - 32 - 10) / 2;
+    // Fixed width so the variant options sit in a single horizontal line and
+    // scroll sideways (the next one peeks), instead of wrapping to rows.
+    const boxW = 172.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -871,85 +922,92 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         if (colours.length > 1) ...[
           _variantHeading('Selected Color: ', selectedColour),
           const SizedBox(height: 10),
-          // Smaller, wrapping thumbnails so every colour is visible at once —
-          // no horizontal scrolling to discover variants.
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: colours.map((col) {
-              final rep = variants.firstWhere((v) => _colorKey(v) == col);
-              final selected = col == selectedColour;
-              return GestureDetector(
-                onTap: () => setState(() {
-                  _selectedColor = col;
-                  _selectedVariant = rep;
-                  _selectedImageIndex = 0;
-                }),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected
-                              ? const Color(0xFF1400E0)
-                              : const Color(0xFFE2E8F0),
-                          width: selected ? 2 : 1,
-                        ),
-                      ),
-                      clipBehavior: Clip.hardEdge,
-                      padding: const EdgeInsets.all(4),
-                      child: (rep.imageUrl.isNotEmpty ||
-                              product.imageUrl.isNotEmpty)
-                          ? CachedNetworkImage(
-                              imageUrl: rep.imageUrl.isNotEmpty
-                                  ? rep.imageUrl
-                                  : product.imageUrl,
-                              fit: BoxFit.contain,
-                              errorWidget: (_, __, ___) => const Icon(
-                                  Icons.phone_android,
+          // Single horizontal line — scroll sideways to reach the rest; the
+          // last swatch peeks to hint there's more (never wraps to a 2nd row).
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: colours.map((col) {
+                final rep = variants.firstWhere(
+                    (v) => _colorKey(v).toLowerCase() == col.toLowerCase());
+                final swatchImage =
+                    rep.imageUrl.isNotEmpty ? rep.imageUrl : product.imageUrl;
+                final selected =
+                    col.toLowerCase() == selectedColour.toLowerCase();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: GestureDetector(
+                    onTap: () => setState(() {
+                      _selectedColor = col;
+                      _selectedVariant = rep;
+                      _selectedImageIndex = 0;
+                    }),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 54,
+                          height: 54,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: selected
+                                  ? const Color(0xFF1400E0)
+                                  : const Color(0xFFE2E8F0),
+                              width: selected ? 2 : 1,
+                            ),
+                          ),
+                          clipBehavior: Clip.hardEdge,
+                          padding: const EdgeInsets.all(4),
+                          child: swatchImage.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: swatchImage,
+                                  fit: BoxFit.contain,
+                                  errorWidget: (_, __, ___) => const Icon(
+                                      Icons.phone_android,
+                                      color: AppColors.textHint),
+                                )
+                              : const Icon(Icons.phone_android,
                                   color: AppColors.textHint),
-                            )
-                          : const Icon(Icons.phone_android,
-                              color: AppColors.textHint),
-                    ),
-                    const SizedBox(height: 4),
-                    SizedBox(
-                      width: 56,
-                      child: Text(
-                        col,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: selected
-                              ? const Color(0xFF1400E0)
-                              : const Color(0xFF64748B),
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 56,
+                          child: Text(
+                            col,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: selected
+                                  ? const Color(0xFF1400E0)
+                                  : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           const SizedBox(height: 16),
         ],
         // ---- STORAGE / RAM (for the selected colour) ----
         _variantHeading('Variant: ', _selectedVariant?.label ?? ''),
         const SizedBox(height: 10),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: colourVariants.map((v) {
-            final selected = _selectedVariant?.id == v.id;
-            return GestureDetector(
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: colourVariants.map((v) {
+              final selected = _selectedVariant?.id == v.id;
+              return Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: GestureDetector(
               onTap: () => setState(() {
                 _selectedVariant = v;
                 _selectedImageIndex = 0;
@@ -1027,8 +1085,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                   ],
                 ),
               ),
-            );
-          }).toList(),
+            ));
+            }).toList(),
+          ),
         ),
       ],
     );

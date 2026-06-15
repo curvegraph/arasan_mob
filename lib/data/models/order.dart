@@ -180,7 +180,15 @@ class Order {
       customerName: json['customer_name'] as String,
       customerEmail: json['customer_email'] as String? ?? '',
       customerPhone: json['customer_phone'] as String,
-      shippingAddress: '${json['shipping_address_line1'] ?? ''}, ${json['shipping_city'] ?? ''}, ${json['shipping_state'] ?? ''} - ${json['shipping_pincode'] ?? ''}',
+      // Join only the parts that are actually present, so a missing field
+      // doesn't leave stray punctuation (", ,  - ") that renders as a blank box.
+      shippingAddress: [
+        (json['shipping_address_line1'] ?? '').toString().trim(),
+        (json['shipping_address_line2'] ?? '').toString().trim(),
+        (json['shipping_city'] ?? '').toString().trim(),
+        (json['shipping_state'] ?? '').toString().trim(),
+        (json['shipping_pincode'] ?? '').toString().trim(),
+      ].where((p) => p.isNotEmpty).join(', '),
       shippingAddressLine1: json['shipping_address_line1'] as String?,
       shippingCity: json['shipping_city'] as String?,
       shippingState: json['shipping_state'] as String?,

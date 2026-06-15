@@ -189,8 +189,12 @@ class OrderSummaryItem {
   final String orderNumber;
   final double totalAmount;
   final String paymentStatus;
+  final String paymentMethod;
   final String status;
   final DateTime createdAt;
+  final String customerName;
+  final String customerPhone;
+  final String shippingAddress;
   final List<OrderItemSummary> items;
 
   OrderSummaryItem({
@@ -198,19 +202,35 @@ class OrderSummaryItem {
     required this.orderNumber,
     required this.totalAmount,
     required this.paymentStatus,
+    required this.paymentMethod,
     required this.status,
     required this.createdAt,
+    required this.customerName,
+    required this.customerPhone,
+    required this.shippingAddress,
     required this.items,
   });
 
   factory OrderSummaryItem.fromJson(Map<String, dynamic> json) {
     return OrderSummaryItem(
-      id: json['id'],
-      orderNumber: json['order_number'],
-      totalAmount: (json['total_amount'] as num).toDouble(),
-      paymentStatus: json['payment_status'],
-      status: json['status'],
+      id: json['id']?.toString() ?? '',
+      orderNumber: json['order_number'] ?? '',
+      totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
+      paymentStatus: json['payment_status'] ?? '',
+      paymentMethod: json['payment_method'] ?? '',
+      status: json['status'] ?? '',
       createdAt: DateTime.parse(json['created_at']),
+      customerName: json['customer_name'] ?? '',
+      customerPhone: json['customer_phone'] ?? '',
+      // Built from the saved address parts (skipping any blanks) so the order
+      // detail page can show the address the customer entered at checkout.
+      shippingAddress: [
+        (json['shipping_address_line1'] ?? '').toString().trim(),
+        (json['shipping_address_line2'] ?? '').toString().trim(),
+        (json['shipping_city'] ?? '').toString().trim(),
+        (json['shipping_state'] ?? '').toString().trim(),
+        (json['shipping_pincode'] ?? '').toString().trim(),
+      ].where((p) => p.isNotEmpty).join(', '),
       items: (json['order_items'] as List? ?? []).map((i) => OrderItemSummary.fromJson(i)).toList(),
     );
   }
@@ -218,23 +238,30 @@ class OrderSummaryItem {
 
 class OrderItemSummary {
   final String id;
+  final String productId;
   final String productName;
+  final String imageUrl;
   final int quantity;
   final double unitPrice;
 
   OrderItemSummary({
     required this.id,
+    required this.productId,
     required this.productName,
+    required this.imageUrl,
     required this.quantity,
     required this.unitPrice,
   });
 
   factory OrderItemSummary.fromJson(Map<String, dynamic> json) {
     return OrderItemSummary(
-      id: json['id'],
-      productName: json['product_name'],
-      quantity: json['quantity'],
-      unitPrice: (json['unit_price'] as num).toDouble(),
+      id: json['id']?.toString() ?? '',
+      productId: json['product_id']?.toString() ?? '',
+      productName: json['product_name'] ?? '',
+      // Backend snapshots/backfills the product image onto each order item.
+      imageUrl: json['product_image'] as String? ?? '',
+      quantity: json['quantity'] ?? 1,
+      unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
     );
   }
 }

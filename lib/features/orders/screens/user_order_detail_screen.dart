@@ -62,7 +62,7 @@ class UserOrderDetailScreen extends StatelessWidget {
             child: Divider(height: 1, color: Color(0xFFE2E8F0)),
           ),
         ),
-        backgroundColor: AppColors.background,
+        backgroundColor: Colors.white,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -121,9 +121,9 @@ class UserOrderDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 70,
-        title: Text(
-          'Order #${order.id}',
-          style: const TextStyle(
+        title: const Text(
+          'Order Details',
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w900,
             color: Color(0xFF1A1A1A),
@@ -131,18 +131,15 @@ class UserOrderDetailScreen extends StatelessWidget {
             height: 1.0,
           ),
         ),
-        backgroundColor: AppColors.surface,
+        backgroundColor: Colors.white,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: AppColors.glassWhite,
-          ),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: Color(0xFFE2E8F0)),
         ),
       ),
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -558,23 +555,31 @@ class UserOrderDetailScreen extends StatelessWidget {
             ],
           ),
           const Divider(height: AppSpacing.lg, color: AppColors.divider),
-          Text(
-            order.customerName,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+          if (order.customerName.trim().isNotEmpty) ...[
+            Text(
+              order.customerName,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
             ),
-          ),
-          const SizedBox(height: 2),
+            const SizedBox(height: 2),
+          ],
+          if (order.customerPhone.trim().isNotEmpty) ...[
+            Text(
+              order.customerPhone,
+              style: const TextStyle(
+                  fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 4),
+          ],
+          // Fall back to a clear message instead of a blank box when the order
+          // carries no saved address (e.g. an abandoned/unpaid order).
           Text(
-            order.customerPhone,
-            style: const TextStyle(
-                fontSize: 13, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            order.shippingAddress,
+            order.shippingAddress.trim().isNotEmpty
+                ? order.shippingAddress
+                : 'No shipping address on file for this order.',
             style: const TextStyle(
               fontSize: 13,
               color: AppColors.textSecondary,

@@ -156,12 +156,20 @@ class SliverProductsGridSectionState extends State<SliverProductsGridSection> {
     final width = MediaQuery.sizeOf(context).width;
     final crossAxisCount = _getCrossAxisCount(width);
 
+    // Cards carrying a variant chip (colour · storage · RAM) are one row taller.
+    // Give those sections slightly taller cells so the chip card doesn't
+    // overflow its tile; plain sections keep the tighter ratio.
+    final hasVariantCards =
+        _products.any((p) => (p.variantLabel ?? '').trim().isNotEmpty);
+    final aspect =
+        _getChildAspectRatio(crossAxisCount) - (hasVariantCards ? 0.05 : 0.0);
+
     final grid = SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       sliver: SliverGrid(
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
-          childAspectRatio: _getChildAspectRatio(crossAxisCount),
+          childAspectRatio: aspect,
           crossAxisSpacing: 12,
           mainAxisSpacing: 4,
         ),

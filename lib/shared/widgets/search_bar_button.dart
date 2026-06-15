@@ -29,11 +29,28 @@ class _SearchBarButtonState extends State<SearchBarButton> {
   Timer? _debounce;
   bool _focused = false;
 
+  bool _seededFromRoute = false;
+
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onTextChanged);
     _focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // On the PDP header (compact), pre-fill the search bar from the `q` route
+    // param — present only when the page was reached via a search result, so a
+    // product opened by tapping a card shows an empty bar. Done once.
+    if (widget.compact && !_seededFromRoute) {
+      _seededFromRoute = true;
+      final q = GoRouterState.of(context).uri.queryParameters['q'] ?? '';
+      if (q.isNotEmpty && _controller.text.isEmpty) {
+        _controller.text = q;
+      }
+    }
   }
 
   @override
@@ -83,7 +100,15 @@ class _SearchBarButtonState extends State<SearchBarButton> {
   void _openProduct(String id) {
     _removeOverlay();
     _focusNode.unfocus();
-    context.push('/shop/product/$id');
+    // Carry the typed search term to the PDP so its search bar keeps showing it.
+    // A product opened by TAPPING A CARD pushes the plain route (no `q`), so its
+    // PDP search bar stays empty — exactly the required distinction.
+    final q = _controller.text.trim();
+    if (q.isNotEmpty) {
+      context.push('/shop/product/$id?q=${Uri.encodeComponent(q)}');
+    } else {
+      context.push('/shop/product/$id');
+    }
   }
 
   Widget _buildOverlay() {
@@ -188,8 +213,8 @@ class _SearchBarButtonState extends State<SearchBarButton> {
       height: widget.compact ? 40 : 42,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        // Fully white pill (no grey fill) on the home search bar.
-        color: widget.compact ? const Color(0xFFF1F5F9) : Colors.white,
+        // Fully white pill everywhere (incl. the PDP compact header) — no grey fill.
+        color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: _focused ? const Color(0xFF1400E0) : const Color(0xFFE2E8F0),

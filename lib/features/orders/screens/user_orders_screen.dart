@@ -5,9 +5,6 @@ import 'package:shimmer/shimmer.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/utils/app_animations.dart';
-import '../../../core/utils/currency_formatter.dart';
-import '../../../core/utils/date_formatter.dart';
-import '../../../core/utils/glass_morphism.dart';
 import '../../../data/models/order.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_order_provider.dart';
@@ -21,6 +18,8 @@ class UserOrdersScreen extends StatefulWidget {
 }
 
 class _UserOrdersScreenState extends State<UserOrdersScreen> {
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -58,81 +57,241 @@ class _UserOrdersScreenState extends State<UserOrdersScreen> {
           child: Divider(height: 1, color: Color(0xFFE2E8F0)),
         ),
       ),
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       body: Column(
         children: [
-          _buildFilterTabs(context),
-          Expanded(child: _OrdersList(onRefresh: _loadOrders)),
+          _buildSearchAndFilter(context),
+          Expanded(
+              child: _OrdersList(
+                  onRefresh: _loadOrders, searchQuery: _searchQuery)),
         ],
       ),
     );
   }
 
-  Widget _buildFilterTabs(BuildContext context) {
-    final orderProvider = context.watch<UserOrderProvider>();
-    final currentFilter = orderProvider.statusFilter;
-
-    final filters = <MapEntry<OrderStatus?, String>>[
-      const MapEntry(null, 'All'),
-      const MapEntry(OrderStatus.pending, 'Pending'),
-      const MapEntry(OrderStatus.confirmed, 'Confirmed'),
-      const MapEntry(OrderStatus.shipped, 'Shipped'),
-      const MapEntry(OrderStatus.outForDelivery, 'Out for Delivery'),
-      const MapEntry(OrderStatus.delivered, 'Delivered'),
-      const MapEntry(OrderStatus.cancelled, 'Cancelled'),
-    ];
-
+  // Search field + a "Filters" button that opens the status filter sheet
+  // (Meesho-style), replacing the old inline scrolling chip row.
+  Widget _buildSearchAndFilter(BuildContext context) {
+    final currentFilter = context.watch<UserOrderProvider>().statusFilter;
     return Container(
       color: AppColors.surface,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.userPagePadding),
-        child: Row(
-          children: filters.map((entry) {
-            final isSelected = currentFilter == entry.key;
-            return Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
-              child: FilterChip(
-                label: Text(entry.value),
-                selected: isSelected,
-                onSelected: (_) =>
-                    orderProvider.setStatusFilter(entry.key),
-                backgroundColor: Colors.white,
-                selectedColor: const Color(0xFF1400E0).withValues(alpha: 0.10),
-                labelStyle: TextStyle(
-                  color: isSelected
-                      ? const Color(0xFF1400E0)
-                      : const Color(0xFF64748B),
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  letterSpacing: 0.1,
-                ),
-                side: BorderSide(
-                  color: isSelected
-                      ? const Color(0xFF1400E0)
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                // No border line — just a subtle filled pill so it stays
+                // visible on the white page.
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.search, size: 20, color: Color(0xFF94A3B8)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      onChanged: (v) => setState(() => _searchQuery = v),
+                      decoration: const InputDecoration(
+                        hintText: 'Search orders',
+                        border: InputBorder.none,
+                        isDense: true,
+                        hintStyle: TextStyle(
+                            fontSize: 14, color: Color(0xFF94A3B8)),
+                      ),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          InkWell(
+            onTap: () => _showFilterSheet(context),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: currentFilter != null
+                    ? AppColors.primary.withValues(alpha: 0.10)
+                    : AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: currentFilter != null
+                      ? AppColors.primary
                       : const Color(0xFFE2E8F0),
-                  width: 1.5,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.tune,
+                      size: 18,
+                      color: currentFilter != null
+                          ? AppColors.primary
+                          : const Color(0xFF64748B)),
+                  const SizedBox(width: 6),
+                  Text('Filters',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: currentFilter != null
+                              ? AppColors.primary
+                              : const Color(0xFF64748B))),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFilterSheet(BuildContext context) {
+    final provider = context.read<UserOrderProvider>();
+    OrderStatus? selected = provider.statusFilter;
+    const options = <MapEntry<OrderStatus?, String>>[
+      MapEntry(null, 'All'),
+      MapEntry(OrderStatus.pending, 'Ordered'),
+      MapEntry(OrderStatus.confirmed, 'Confirmed'),
+      MapEntry(OrderStatus.shipped, 'Shipped'),
+      MapEntry(OrderStatus.outForDelivery, 'Out for Delivery'),
+      MapEntry(OrderStatus.delivered, 'Delivered'),
+      MapEntry(OrderStatus.cancelled, 'Cancelled'),
+      MapEntry(OrderStatus.returned, 'Return'),
+    ];
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            return SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.8,
                 ),
-                showCheckmark: false,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('FILTER BY',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                                color: Color(0xFF1A1A1A))),
+                        IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: Text('Status',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF64748B))),
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: options
+                            .map((o) => RadioListTile<OrderStatus?>(
+                                  value: o.key,
+                                  groupValue: selected,
+                                  onChanged: (v) =>
+                                      setSheet(() => selected = v),
+                                  title: Text(o.value),
+                                  activeColor: AppColors.primary,
+                                  dense: true,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              provider.setStatusFilter(null);
+                              Navigator.pop(ctx);
+                            },
+                            style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10))),
+                            child: const Text('Clear',
+                                style: TextStyle(
+                                    color: Color(0xFF334155),
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              provider.setStatusFilter(selected);
+                              Navigator.pop(ctx);
+                            },
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10))),
+                            child: const Text('Apply',
+                                style: TextStyle(fontWeight: FontWeight.w800)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                ),
               ),
             );
-          }).toList(),
-        ),
-      ),
+          },
+        );
+      },
     );
   }
 }
 
 class _OrdersList extends StatelessWidget {
   final VoidCallback onRefresh;
+  final String searchQuery;
 
-  const _OrdersList({required this.onRefresh});
+  const _OrdersList({required this.onRefresh, this.searchQuery = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +301,17 @@ class _OrdersList extends StatelessWidget {
       return _buildShimmerLoading();
     }
 
-    final orders = orderProvider.orders;
+    var orders = orderProvider.orders;
+    // Client-side search across order number / id / product names.
+    final q = searchQuery.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      orders = orders
+          .where((o) =>
+              o.orderNumber.toLowerCase().contains(q) ||
+              o.id.toLowerCase().contains(q) ||
+              o.items.any((it) => it.productName.toLowerCase().contains(q)))
+          .toList();
+    }
 
     if (orders.isEmpty) {
       return _buildEmptyState(context, orderProvider.statusFilter);
@@ -359,94 +528,74 @@ class _OrderCard extends StatelessWidget {
     }
   }
 
-  // Mini status timeline dots (5 steps now: pending, confirmed, shipped, out_for_delivery, delivered)
-  int _statusProgress(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pending:
-        return 1;
-      case OrderStatus.confirmed:
-        return 2;
-      case OrderStatus.shipped:
-        return 3;
-      case OrderStatus.outForDelivery:
-        return 4;
-      case OrderStatus.delivered:
-        return 5;
-      case OrderStatus.cancelled:
-        return -1;
-      case OrderStatus.returned:
-        return -1;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final firstItem = order.items.isNotEmpty ? order.items.first : null;
     final statusColor = _statusColor(order.status);
-    final progress = _statusProgress(order.status);
+    final qty = firstItem?.quantity ?? 1;
 
+    // Clean, product-focused card — product image + name + qty + status only.
+    // No order id, no timeline, no grey footer, no "View Details" button; the
+    // whole card taps through to the order detail page.
     return GestureDetector(
       onTap: () => context.push('/shop/account/orders/${order.id}'),
       child: Container(
         margin: const EdgeInsets.only(bottom: AppSpacing.md),
-        decoration: PremiumDecorations.glassCard(),
-        child: Column(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Order header with ID, date, and status badge
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.sm,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: ImagePlaceholder(
+                imageUrl: firstItem?.imageUrl ?? '',
+                width: 92,
+                height: 92,
+                icon: Icons.phone_android,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Expanded + ellipsis: the order id is a long UUID and without
-                  // this it pushed the status badge off-screen (right overflow).
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Order #${order.orderNumber.isNotEmpty ? order.orderNumber : order.id}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF1A1A1A),
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          DateFormatter.format(order.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    firstItem?.productName ?? 'Product',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                      height: 1.25,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(height: 6),
+                  Text(
+                    order.items.length > 1
+                        ? 'Qty: $qty  ·  +${order.items.length - 1} more'
+                        : 'Qty: $qty',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
+                        horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.15),
+                      color: statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: statusColor.withValues(alpha: 0.3),
-                      ),
                     ),
                     child: Text(
                       order.statusLabel,
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
                         color: statusColor,
                       ),
                     ),
@@ -454,152 +603,10 @@ class _OrderCard extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Mini status timeline (5 steps: pending, confirmed, shipped, out_for_delivery, delivered)
-            if (progress > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                ),
-                child: Row(
-                  children: List.generate(5, (index) {
-                    final isCompleted = index < progress;
-                    final isCurrent = index == progress - 1;
-                    return Expanded(
-                      child: Row(
-                        children: [
-                          Container(
-                            width: isCurrent ? 10 : 8,
-                            height: isCurrent ? 10 : 8,
-                            decoration: BoxDecoration(
-                              color: isCompleted
-                                  ? statusColor
-                                  : AppColors.border,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          if (index < 4)
-                            Expanded(
-                              child: Container(
-                                height: 2,
-                                color: isCompleted &&
-                                        index < progress - 1
-                                    ? statusColor.withValues(alpha: 0.4)
-                                    : AppColors.border,
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  }),
-                ),
-              ),
-
-            const Divider(height: 1, color: AppColors.divider),
-
-            // First item preview
-            if (firstItem != null)
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: ImagePlaceholder(
-                        imageUrl: firstItem.imageUrl,
-                        width: 60,
-                        height: 60,
-                        icon: Icons.phone_android,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            firstItem.productName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          if (order.items.length > 1)
-                            Text(
-                              '+${order.items.length - 1} more item${order.items.length - 1 > 1 ? 's' : ''}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            // Order footer with items summary, total, and View Details
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceVariant,
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(16),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${order.itemCount} item${order.itemCount > 1 ? 's' : ''}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        CurrencyFormatter.format(order.totalAmount),
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  ElevatedButton(
-                    onPressed: () =>
-                        context.push('/shop/account/orders/${order.id}'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 0,
-                      textStyle: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    child: const Text('View Details'),
-                  ),
-                ],
-              ),
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.chevron_right,
+                  color: AppColors.textHint, size: 22),
             ),
           ],
         ),

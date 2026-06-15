@@ -13,7 +13,7 @@ class AppColors {
   static const Color headerText = Color(0xFFFFFFFF);     // White
 
   // Background
-  static const Color background = Color(0xFFEEF2FF);     // Very light blue
+  static const Color background = Color(0xFFFFFFFF);     // Fully white (was light blue-grey)
   static const Color surface = Color(0xFFFFFFFF);        // White
   static const Color surfaceVariant = Color(0xFFF1F5F9); // Subtle gray
 

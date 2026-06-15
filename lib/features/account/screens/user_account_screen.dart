@@ -99,13 +99,12 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (auth.isDemoMode) _buildDemoBanner(),
+          // No "Shopping > Account" breadcrumb — just the page title. Status-bar
+          // inset added to the top padding since this screen has no app bar.
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: _buildBreadcrumb(),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
+            padding: EdgeInsets.fromLTRB(
+                20, MediaQuery.paddingOf(context).top + 16, 20, 0),
+            child: const Text(
               'My account',
               style: TextStyle(
                 fontSize: 24,
@@ -178,7 +177,15 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
         final item = _menuItems[index];
         final isSelected = _selectedIndex == index;
         return GestureDetector(
-          onTap: () => setState(() => _selectedIndex = index),
+          onTap: () {
+            if (index == 1) {
+              context.push('/shop/wishlist');
+            } else if (index == 2) {
+              context.push('/shop/account/orders');
+            } else {
+              setState(() => _selectedIndex = index);
+            }
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             width: double.infinity,
@@ -232,7 +239,18 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
             child: ChoiceChip(
               label: Text(item.title),
               selected: isSelected,
-              onSelected: (_) => setState(() => _selectedIndex = index),
+              // Wishlist + Orders open the standalone screens (the ones with the
+              // product-grid wishlist and the search/Filters order list) so the
+              // account tabs don't show a separate, stale inline copy.
+              onSelected: (_) {
+                if (index == 1) {
+                  context.push('/shop/wishlist');
+                } else if (index == 2) {
+                  context.push('/shop/account/orders');
+                } else {
+                  setState(() => _selectedIndex = index);
+                }
+              },
               selectedColor: const Color(0xFF1400E0).withValues(alpha: 0.10),
               backgroundColor: Colors.white,
               labelStyle: TextStyle(
