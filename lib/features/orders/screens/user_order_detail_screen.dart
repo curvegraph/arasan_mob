@@ -475,53 +475,85 @@ class UserOrderDetailScreen extends StatelessWidget {
           const Divider(height: AppSpacing.lg, color: AppColors.divider),
           ...order.items.map((item) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: ImagePlaceholder(
-                        imageUrl: item.imageUrl,
-                        width: 56,
-                        height: 56,
-                        icon: Icons.phone_android,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.productName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textPrimary,
-                            ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: ImagePlaceholder(
+                            imageUrl: item.imageUrl,
+                            width: 56,
+                            height: 56,
+                            icon: Icons.phone_android,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Qty: ${item.quantity}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textSecondary,
-                            ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.productName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Qty: ${item.quantity}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Text(
+                          CurrencyFormatter.format(item.total),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      CurrencyFormatter.format(item.total),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                    // Once the order is delivered, each product can be reviewed
+                    // (rating + photos) — the review page handles the rest.
+                    if (order.status == OrderStatus.delivered) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: () => context.push(
+                              '/shop/product/${item.productId}/write-review'),
+                          icon: const Icon(Icons.rate_review_outlined, size: 16),
+                          label: const Text('Write a Review'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: BorderSide(
+                                color: AppColors.primary.withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                            textStyle: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               )),
@@ -825,33 +857,7 @@ class UserOrderDetailScreen extends StatelessWidget {
               ),
             ),
           if (isDelivered) ...[
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  if (order.items.isNotEmpty) {
-                    context.push(
-                        '/shop/product/${order.items.first.productId}/write-review');
-                  }
-                },
-                icon: const Icon(Icons.rate_review_outlined, size: 20),
-                label: const Text(
-                  'Write a Review',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
+            // Per-product "Write a Review" buttons live in the items list above.
             SizedBox(
               width: double.infinity,
               height: 48,

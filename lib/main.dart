@@ -18,6 +18,7 @@ import 'providers/banner_provider.dart';
 import 'providers/offer_provider.dart';
 import 'providers/cart_provider.dart';
 import 'providers/wishlist_provider.dart';
+import 'providers/shared_provider.dart';
 import 'providers/user_order_provider.dart';
 import 'providers/review_provider.dart';
 import 'providers/notification_provider.dart';
@@ -178,6 +179,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => OfferProvider()),
         ChangeNotifierProvider(create: (_) => CartProvider()),
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
+        ChangeNotifierProvider(create: (_) => SharedProvider()..load()),
         ChangeNotifierProvider(create: (_) => UserOrderProvider()),
         ChangeNotifierProvider(create: (_) => ReviewProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),

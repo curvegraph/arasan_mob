@@ -206,16 +206,20 @@ class CheckoutProvider extends ChangeNotifier {
         deliveryOption: _deliveryOption == DeliveryOption.express ? 'express' : 'standard',
       );
 
-      if (data['success'] != true || data['razorpay_order_id'] == null) {
+      // ApiService unwraps the response envelope to `body['data']`, so the
+      // backend's camelCase fields land here directly (the `success` flag was
+      // stripped during unwrap). A present `razorpayOrderId` means success.
+      if (data['razorpayOrderId'] == null) {
         throw Exception(data['error'] ?? 'Failed to create payment order');
       }
 
-      _razorpayOrderId = data['razorpay_order_id'] as String;
-      _razorpayKeyId = data['razorpay_key_id'] as String;
+      _razorpayOrderId = data['razorpayOrderId'] as String;
+      _razorpayKeyId = data['keyId'] as String;
       _razorpayAmount = data['amount'] as int;
-      _customerName = data['customer_name'] as String?;
-      _customerEmail = data['customer_email'] as String?;
-      _customerPhone = data['customer_phone'] as String?;
+      // create-order does not return customer details; prefill stays optional.
+      _customerName = data['customerName'] as String?;
+      _customerEmail = data['customerEmail'] as String?;
+      _customerPhone = data['customerPhone'] as String?;
 
       _isProcessing = false;
       notifyListeners();
@@ -241,6 +245,9 @@ class CheckoutProvider extends ChangeNotifier {
     required String razorpayPaymentId,
     required String razorpaySignature,
     required List<Map<String, dynamic>> items,
+    String? customerName,
+    String? customerEmail,
+    String? customerPhone,
     String? couponCode,
     String? notes,
   }) async {
@@ -257,6 +264,9 @@ class CheckoutProvider extends ChangeNotifier {
         razorpayPaymentId: razorpayPaymentId,
         razorpaySignature: razorpaySignature,
         items: items,
+        customerName: customerName,
+        customerEmail: customerEmail,
+        customerPhone: customerPhone,
         shippingAddressLine1: _selectedAddress!.addressLine1,
         shippingCity: _selectedAddress!.city,
         shippingState: _selectedAddress!.state,
@@ -267,12 +277,15 @@ class CheckoutProvider extends ChangeNotifier {
         notes: notes,
       );
 
-      if (data['success'] == true) {
+      // Unwrapped response is the flat order payload
+      // ({ orderId, orderNumber, total, paymentStatus }) — a present
+      // orderNumber means the order was created.
+      if (data['orderNumber'] != null) {
         _transactionId = razorpayPaymentId;
         _paymentStatus = PaymentStatus.success;
         _isProcessing = false;
         notifyListeners();
-        return data['order'] as Map<String, dynamic>?;
+        return data;
       } else {
         throw Exception(data['error'] ?? 'Payment verification failed');
       }

@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../providers/user_order_provider.dart';
 
 class OrderSuccessScreen extends StatefulWidget {
+  /// Human-friendly order number, shown on this screen (e.g. "33").
   final String orderId;
 
-  const OrderSuccessScreen({super.key, required this.orderId});
+  /// The order's database UUID, used to open its details page directly.
+  /// Null when not supplied (older entry points) — View Order then falls back
+  /// to the orders list.
+  final String? orderDbId;
+
+  const OrderSuccessScreen({super.key, required this.orderId, this.orderDbId});
 
   @override
   State<OrderSuccessScreen> createState() => _OrderSuccessScreenState();
@@ -21,6 +29,8 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
   late Animation<double> _checkRotate;
   late Animation<double> _cardSlide;
   late Animation<double> _cardFade;
+
+  bool _openingOrder = false;
 
   @override
   void initState() {
@@ -59,6 +69,23 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
     _checkController.dispose();
     _contentController.dispose();
     super.dispose();
+  }
+
+  /// Open the order's details page directly. The detail screen reads from the
+  /// provider cache, so we fetch the just-placed order into the cache first
+  /// (it isn't there yet right after checkout). Falls back to the orders list
+  /// when we don't have the order's UUID.
+  Future<void> _viewOrder() async {
+    final dbId = widget.orderDbId;
+    if (dbId == null || dbId.isEmpty) {
+      context.go('/shop/account/orders');
+      return;
+    }
+    setState(() => _openingOrder = true);
+    await context.read<UserOrderProvider>().fetchOrderDetails(dbId);
+    if (!mounted) return;
+    setState(() => _openingOrder = false);
+    context.push('/shop/account/orders/$dbId');
   }
 
   @override
@@ -268,8 +295,7 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
                               // View Order
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: () =>
-                                      context.push('/shop/account/orders/${widget.orderId}'),
+                                  onPressed: _openingOrder ? null : _viewOrder,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primary,
                                     foregroundColor: Colors.white,
@@ -279,14 +305,24 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
-                                  child: const Text(
-                                    'View Order',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
+                                  child: _openingOrder
+                                      ? const SizedBox(
+                                          height: 16,
+                                          width: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                          ),
+                                        )
+                                      : const Text(
+                                          'View Order',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                 ),
                               ),
                             ],

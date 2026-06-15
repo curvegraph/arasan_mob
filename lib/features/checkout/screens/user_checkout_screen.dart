@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../../core/utils/razorpay_helper.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
@@ -12,11 +12,11 @@ import '../../../data/models/address.dart';
 import '../../../data/models/order.dart';
 import '../../../data/models/cart.dart';
 import '../../../data/models/product.dart';
+import '../../../data/services/secure_api_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/checkout_provider.dart';
 import '../../../providers/store_settings_provider.dart';
-import '../../../providers/user_order_provider.dart';
 import '../../../providers/user_profile_provider.dart';
 import '../../../shared/widgets/image_placeholder.dart';
 import '../../auth/screens/login_dialog.dart';
@@ -113,33 +113,64 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
   bool _useSavedAddress = false;
   UserAddress? _selectedSavedAddress;
 
+  // Razorpay must be kept alive for the lifetime of this screen — a transient
+  // instance can be garbage-collected before the payment result arrives, so its
+  // success/error callbacks silently never fire. The pending-order context is
+  // stashed here when the sheet opens and read back in the result handlers.
+  late final Razorpay _razorpay;
+  CheckoutProvider? _pendingCheckout;
+  CartProvider? _pendingCartProvider;
+  List<Map<String, dynamic>>? _pendingItems;
+  String? _pendingCoupon;
+  String _pendingCustomerName = '';
+  String _pendingCustomerEmail = '';
+  String _pendingCustomerPhone = '';
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CheckoutProvider>().reset();
-      // Re-fetch on every checkout entry so admin toggles (payment methods,
-      // tax) take effect immediately instead of waiting for the 60s poll.
-      context.read<StoreSettingsProvider>().loadSettings(force: true);
-      final profileProvider = context.read<UserProfileProvider>();
-      if (!profileProvider.isInitialized) {
-        profileProvider.loadAddresses();
-      }
-      // If user has saved addresses, pre-select the default
-      final addresses = profileProvider.addresses;
-      if (addresses.isNotEmpty) {
-        final defaultAddr = profileProvider.defaultAddress ?? addresses.first;
-        setState(() {
-          _useSavedAddress = true;
-          _selectedSavedAddress = defaultAddr;
-        });
-        context.read<CheckoutProvider>().setAddress(defaultAddr);
-      }
-    });
+    _razorpay = Razorpay();
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
+    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initCheckoutDefaults());
+  }
+
+  /// Sets up the checkout defaults: re-fetch store settings, load saved
+  /// addresses, and — once they're available — default to the saved (default)
+  /// address with its phone pre-filled. The user can still switch to "New
+  /// Address". Awaiting the load matters: addresses arrive asynchronously, so
+  /// reading them synchronously would miss them and wrongly show the new-address
+  /// form on first open.
+  Future<void> _initCheckoutDefaults() async {
+    if (!mounted) return;
+    context.read<CheckoutProvider>().reset();
+    context.read<StoreSettingsProvider>().loadSettings(force: true);
+    final profileProvider = context.read<UserProfileProvider>();
+    if (!profileProvider.isInitialized) {
+      await profileProvider.loadAddresses();
+    }
+    if (!mounted) return;
+    final addresses = profileProvider.addresses;
+    final authPhone = context.read<AuthProvider>().userPhone;
+    if (addresses.isNotEmpty) {
+      final defaultAddr = profileProvider.defaultAddress ?? addresses.first;
+      setState(() {
+        _useSavedAddress = true;
+        _selectedSavedAddress = defaultAddr;
+        _phoneController.text = _stripPhonePrefix(
+          defaultAddr.phone.isNotEmpty ? defaultAddr.phone : (authPhone ?? ''),
+        );
+      });
+      context.read<CheckoutProvider>().setAddress(defaultAddr);
+    } else if (authPhone != null && authPhone.isNotEmpty) {
+      setState(() => _phoneController.text = _stripPhonePrefix(authPhone));
+    }
   }
 
   @override
   void dispose() {
+    _razorpay.clear();
     _firstNameController.dispose();
     _lastNameController.dispose();
     _phoneController.dispose();
@@ -148,6 +179,18 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     _cityController.dispose();
     _pincodeController.dispose();
     super.dispose();
+  }
+
+  /// Strips a leading "+91 " (and stray spaces) so the contact field shows the
+  /// bare 10-digit number that the +91 prefix in the UI expects.
+  String _stripPhonePrefix(String phone) =>
+      phone.replaceFirst('+91', '').trim();
+
+  /// The last 10 digits of a phone string (drops "+91", spaces, etc.) — the
+  /// safe form for Razorpay's prefill.contact.
+  String _bareContact(String phone) {
+    final digits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
   }
 
   void _populateFormFromAddress(UserAddress address) {
@@ -165,7 +208,6 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
   Future<void> _placeOrder() async {
     final checkoutProvider = context.read<CheckoutProvider>();
     final cartProvider = context.read<CartProvider>();
-    final orderProvider = context.read<UserOrderProvider>();
     final authProvider = context.read<AuthProvider>();
     final profileProvider = context.read<UserProfileProvider>();
     final cart = cartProvider.cart;
@@ -173,6 +215,19 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     UserAddress? address;
 
     if (_useSavedAddress && _selectedSavedAddress != null) {
+      // The backend requires a contact number on every order, and a saved
+      // address may not carry one — so the Contact field is mandatory here too.
+      if (_phoneController.text.trim().length != 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please enter a valid 10-digit mobile number'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+        return;
+      }
       address = _selectedSavedAddress;
       checkoutProvider.setAddress(address!);
     } else {
@@ -243,9 +298,11 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     }
 
     // Build items list — Buy-Now uses only the chosen product, never the cart.
+    // Backend's validateAndCalculateOrder reads `productId` (camelCase) — the
+    // payment/cod endpoints recompute prices server-side from this.
     final orderItems = _effectiveItems(cart).map((item) {
       return {
-        'product_id': item.product.id,
+        'productId': item.product.id,
         'quantity': item.quantity,
       };
     }).toList();
@@ -256,8 +313,11 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
 
     try {
       if (checkoutProvider.paymentMethod == PaymentMethod.cod) {
-        // COD — create order directly
-        final orderNumber = await orderProvider.placeOrder(
+        // COD — create the order through the secure endpoint that validates
+        // stock and computes totals server-side (same flow the online path
+        // uses). The older /orders endpoint expected flat shipping fields +
+        // client-supplied totals and silently produced null-address orders.
+        final result = await SecureApiService().createOrder(
           items: orderItems,
           customerName: address.fullName,
           customerEmail: authProvider.userEmail,
@@ -275,10 +335,12 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           deliveryOption: deliveryOption,
         );
 
+        final orderNumber = result['orderNumber'];
+        final orderDbId = result['orderId'];
         // A Buy-Now order never touched the cart, so leave the cart intact.
         if (widget.buyNowProduct == null) cartProvider.clearCart();
         if (mounted) {
-          context.go('/shop/order-success/$orderNumber');
+          context.go('/shop/order-success/$orderNumber?oid=$orderDbId');
         }
       } else {
         // Online payment — create Razorpay order
@@ -303,28 +365,30 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           return;
         }
 
-        // Open Razorpay payment sheet via JS
+        // Open Razorpay payment sheet. Pass the customer details captured from
+        // the form/profile — the /verify endpoint requires them to create the
+        // order after payment succeeds.
         if (mounted) {
           _openRazorpayWeb(
             checkout: checkoutProvider,
             cartProvider: cartProvider,
             orderItems: orderItems,
             couponCode: cart.appliedCouponCode,
+            customerName: address.fullName,
+            customerEmail: authProvider.userEmail ?? '',
+            customerPhone: _phoneController.text.trim().length == 10
+                ? '+91 ${_phoneController.text.trim()}'
+                : address.phone,
           );
         }
       }
-    } catch (e, st) {
-      debugPrint('[Checkout] placeOrder failed: $e');
-      debugPrint('$st');
+    } catch (e) {
       if (mounted) {
-        // TEMP: show raw exception text to surface the underlying cause
-        // while we debug. Swap back to friendlyOrderError(e) once stable.
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('DEBUG: $e'),
+            content: Text(friendlyOrderError(e)),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         );
@@ -337,7 +401,20 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     required CartProvider cartProvider,
     required List<Map<String, dynamic>> orderItems,
     String? couponCode,
+    required String customerName,
+    required String customerEmail,
+    required String customerPhone,
   }) {
+    // Stash the context the result handlers need. They run later (after the
+    // user returns from the Razorpay sheet) so they can't rely on locals.
+    _pendingCheckout = checkout;
+    _pendingCartProvider = cartProvider;
+    _pendingItems = orderItems;
+    _pendingCoupon = couponCode;
+    _pendingCustomerName = customerName;
+    _pendingCustomerEmail = customerEmail;
+    _pendingCustomerPhone = customerPhone;
+
     final options = {
       'key': checkout.razorpayKeyId ?? '',
       'amount': checkout.razorpayAmount ?? 0,
@@ -345,50 +422,72 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
       'name': 'Arasan Mobiles',
       'description': 'Order Payment',
       'order_id': checkout.razorpayOrderId ?? '',
+      // Razorpay's checkout can fail to load ("Something went wrong") on a
+      // malformed prefill.contact — anything other than a bare number (a "+91 "
+      // label, spaces, country code) is risky. Send only the last 10 digits,
+      // and omit any prefill field we don't actually have.
       'prefill': {
-        'name': checkout.customerName ?? '',
-        'email': checkout.customerEmail ?? '',
-        'contact': checkout.customerPhone ?? '',
+        if (customerName.trim().isNotEmpty) 'name': customerName.trim(),
+        if (customerEmail.trim().isNotEmpty) 'email': customerEmail.trim(),
+        if (_bareContact(customerPhone).isNotEmpty)
+          'contact': _bareContact(customerPhone),
       },
       'theme': {
         'color': '#D32F2F',
       },
     };
 
-    RazorpayHelper.openCheckout(
-      options: options,
-      onSuccess: (String paymentId, String orderId, String signature) async {
-        final orderData = await checkout.verifyPaymentAndCreateOrder(
-          razorpayPaymentId: paymentId,
-          razorpaySignature: signature,
-          items: orderItems,
-          couponCode: couponCode,
-        );
+    _razorpay.open(options);
+  }
 
-        if (orderData != null && mounted) {
-          // Buy-Now never added to the cart, so don't wipe it.
-          if (widget.buyNowProduct == null) cartProvider.clearCart();
-          checkout.reset();
-          context.go('/shop/order-success/${orderData['order_number']}');
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(checkout.paymentError != null
-                  ? friendlyOrderError(checkout.paymentError!)
-                  : 'Payment verification failed'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
-      },
-      onError: (String message) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Payment failed: $message'), backgroundColor: AppColors.error),
-          );
-        }
-      },
+  Future<void> _onPaymentSuccess(PaymentSuccessResponse response) async {
+    final checkout = _pendingCheckout;
+    final cartProvider = _pendingCartProvider;
+    final items = _pendingItems;
+    if (checkout == null || cartProvider == null || items == null) return;
+
+    final orderData = await checkout.verifyPaymentAndCreateOrder(
+      razorpayPaymentId: response.paymentId ?? '',
+      razorpaySignature: response.signature ?? '',
+      items: items,
+      customerName: _pendingCustomerName,
+      customerEmail: _pendingCustomerEmail,
+      customerPhone: _pendingCustomerPhone,
+      couponCode: _pendingCoupon,
     );
+
+    if (!mounted) return;
+    if (orderData != null) {
+      // Buy-Now never added to the cart, so don't wipe it.
+      if (widget.buyNowProduct == null) cartProvider.clearCart();
+      checkout.reset();
+      context.go(
+          '/shop/order-success/${orderData['orderNumber']}?oid=${orderData['orderId']}');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(checkout.paymentError != null
+              ? friendlyOrderError(checkout.paymentError!)
+              : 'Payment verification failed'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  void _onPaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Payment failed: ${response.message ?? 'Cancelled'}'),
+        backgroundColor: AppColors.error,
+      ),
+    );
+  }
+
+  void _onExternalWallet(ExternalWalletResponse response) {
+    // No external-wallet handling needed; the order completes via the standard
+    // success/verify flow.
   }
 
   @override
@@ -991,7 +1090,10 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
             final isSelected = _selectedSavedAddress?.id == address.id;
             return GestureDetector(
               onTap: () {
-                setState(() => _selectedSavedAddress = address);
+                setState(() {
+                  _selectedSavedAddress = address;
+                  _phoneController.text = _stripPhonePrefix(address.phone);
+                });
                 context.read<CheckoutProvider>().setAddress(address);
               },
               child: Container(

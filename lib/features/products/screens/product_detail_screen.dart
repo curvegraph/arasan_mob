@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/config/supabase_config.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/utils/product_share_url.dart';
 import '../../../data/models/product.dart';
 import '../../../data/services/product_api_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/product_provider.dart';
 import '../../../providers/review_provider.dart';
+import '../../../providers/shared_provider.dart';
 import '../../../providers/store_settings_provider.dart';
 import '../../../providers/wishlist_provider.dart';
 import '../../../providers/user_activity_provider.dart';
@@ -124,6 +125,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       // we never flash "product not found" for a product that does exist.
       await provider.fetchProductById(widget.productId);
       if (mounted) setState(() => _detailLoading = false);
+      // Load reviews (with photos) so the compact ratings strip can show them.
+      if (mounted) {
+        context.read<ReviewProvider>().loadProductReviews(widget.productId);
+      }
       // Related products come from a dedicated endpoint (the home flow doesn't
       // populate the provider's catalogue list).
       try {
@@ -207,6 +212,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     );
   }
 
+  /// Open the OS share sheet with the product, and record it in the user's
+  /// "Shared" list (the Shared tab on the wishlist page).
+  ///
+  /// Shares the same OpenGraph-enabled web permalink the storefront uses
+  /// (`/product/<slug>/p/<id>`), so the link unfurls into a rich preview
+  /// (image/title/description) on WhatsApp and other platforms.
+  Future<void> _shareProduct(Product product) async {
+    final url = productShareUrl(product);
+    final text = '${product.name}\n$url';
+    context.read<SharedProvider>().add(product.id);
+    await Share.share(text, subject: product.name);
+  }
+
   // ===========================================================================
   // ACTION ROW (Wishlist, Share) — no duplicate back button
   // ===========================================================================
@@ -227,19 +245,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
               await wishlist.toggleWishlist(product.id);
             }),
           ),
-          // Share button — copies OG URL to clipboard
+          // Share button — opens the OS share sheet + adds to the Shared list
           IconButton(
             icon: const Icon(Icons.share_outlined, size: 22, color: AppColors.textSecondary),
-            onPressed: () {
-              final shareUrl = 'https://arasanmobiles.com/shop/product/${product.id}';
-              Clipboard.setData(ClipboardData(text: shareUrl));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Product link copied to clipboard'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            onPressed: () => _shareProduct(product),
           ),
         ],
       ),
@@ -291,9 +300,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                 TrustBadgesRow(product: product),
                 const SizedBox(height: 16),
                 if (product.description.isNotEmpty) _buildDescription(product),
-                if (product.specs.isNotEmpty) _buildHighlights(product),
                 if (product.specs.isNotEmpty) _buildSpecifications(product),
-                _buildReviewsSection(avgRating, reviewCount, product),
+                if (reviewCount > 0 || product.reviewCount > 0)
+                  _buildReviewsSection(avgRating, reviewCount, product),
                 const SizedBox(height: 16),
                 _buildSimilarProducts(context.watch<ProductProvider>(), product),
                 const SizedBox(height: 80), // bottom bar clearance
@@ -358,9 +367,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                           _buildDesktopActions(product, isInCart, cart),
                           const SizedBox(height: 16),
                           if (product.description.isNotEmpty) _buildDescription(product),
-                          if (product.specs.isNotEmpty) _buildHighlights(product),
                           if (product.specs.isNotEmpty) _buildSpecifications(product),
-                          _buildReviewsSection(avgRating, reviewCount, product),
+                          if (reviewCount > 0 || product.reviewCount > 0)
+                            _buildReviewsSection(avgRating, reviewCount, product),
                         ],
                       ),
                     ),
@@ -452,17 +461,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         _circleIconButton(
           icon: Icons.share_outlined,
           color: const Color(0xFF64748B),
-          onTap: () {
-            final shareUrl =
-                'https://arasanmobiles.com/shop/product/${product.id}';
-            Clipboard.setData(ClipboardData(text: shareUrl));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Product link copied to clipboard'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
+          onTap: () => _shareProduct(product),
         ),
       ],
     );
@@ -1452,31 +1451,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     );
   }
 
-  Widget _buildHighlights(Product product) {
-    return _expandableSection(
-      'HIGHLIGHTS',
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: product.specs.entries.take(5).map((e) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.check_circle_outline, size: 14, color: AppColors.success),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 80,
-                child: Text(e.key, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-              ),
-              const SizedBox(width: 8),
-              Expanded(child: Text(e.value, style: const TextStyle(fontSize: 13, color: AppColors.textPrimary))),
-            ],
-          ),
-        )).toList(),
-      ),
-    );
-  }
-
   Widget _buildSpecifications(Product product) {
     return _expandableSection(
       'SPECIFICATIONS',
@@ -1506,32 +1480,144 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     );
   }
 
+  /// Compact, Flipkart-style ratings & reviews block: an average + count, then
+  /// a horizontal strip of customer photos. Tapping anywhere opens the full
+  /// reviews page (stars + written feedback). Only rendered by callers when the
+  /// product actually has reviews.
   Widget _buildReviewsSection(double avgRating, int reviewCount, Product product) {
-    return _expandableSection(
-      'REVIEWS',
-      GestureDetector(
-        onTap: () => context.push('/shop/product/${product.id}/reviews'),
-        child: Row(
+    final reviews = context.watch<ReviewProvider>().getProductReviews(product.id);
+    final photos = reviews.expand((r) => r.photos).toList();
+    final displayRating = avgRating > 0 ? avgRating : product.rating;
+    final displayCount = reviewCount > 0 ? reviewCount : product.reviewCount;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => context.push('/shop/product/${product.id}/reviews'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.divider)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ...List.generate(5, (i) => Icon(
-              i < avgRating.round() ? Icons.star : Icons.star_border,
-              size: 18, color: AppColors.rating,
-            )),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${avgRating.toStringAsFixed(1)} out of 5  ($reviewCount reviews)',
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
+            Row(
+              children: [
+                const Text(
+                  'Ratings & Reviews',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const Spacer(),
+                const Text(
+                  'See all',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.primaryLight,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Icon(Icons.chevron_right,
+                    size: 18, color: AppColors.primaryLight),
+              ],
             ),
-            const Text(
-              'See all',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.primaryLight,
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.success,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayRating.toStringAsFixed(1),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      const Icon(Icons.star, size: 12, color: Colors.white),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$displayCount ${displayCount == 1 ? 'review' : 'reviews'}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
+            if (photos.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 64,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: photos.length > 8 ? 8 : photos.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    // On the last visible tile, overlay a "+N" when there are
+                    // more photos than we show.
+                    final isLast = index == 7 && photos.length > 8;
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Stack(
+                        fit: StackFit.passthrough,
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: photos[index],
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              width: 64,
+                              height: 64,
+                              color: AppColors.surfaceVariant,
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              width: 64,
+                              height: 64,
+                              color: AppColors.surfaceVariant,
+                              child: const Icon(Icons.image,
+                                  size: 24, color: AppColors.textHint),
+                            ),
+                          ),
+                          if (isLast)
+                            Container(
+                              width: 64,
+                              height: 64,
+                              color: Colors.black.withValues(alpha: 0.5),
+                              alignment: Alignment.center,
+                              child: Text(
+                                '+${photos.length - 8}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -79,6 +79,16 @@ class OrderApiService {
     return OrderDetails.fromJson(response);
   }
 
+  /// Get a single order as the raw backend row (snake_case + `order_items`),
+  /// for callers that build the [Order] model (e.g. caching after checkout).
+  Future<Map<String, dynamic>> getOrderRaw(String orderId) async {
+    final response = await _api.get(
+      '/orders/my-orders/$orderId',
+      requireAuth: true,
+    );
+    return Map<String, dynamic>.from(response as Map);
+  }
+
   /// Cancel an order
   Future<void> cancelOrder(String orderId, {String? reason}) async {
     await _api.post(

@@ -163,6 +163,29 @@ class UserOrderProvider extends ChangeNotifier {
     }
   }
 
+  /// Fetch a single order by id from the API and cache it, so a freshly-placed
+  /// order can be opened directly (the detail screen reads from this cache).
+  /// Returns the order, or null if it couldn't be loaded.
+  Future<Order?> fetchOrderDetails(String id) async {
+    try {
+      final json = await _orderApiService.getOrderRaw(id);
+      final items = (json['order_items'] as List? ?? [])
+          .map((i) => OrderItem.fromJson(Map<String, dynamic>.from(i as Map)))
+          .toList();
+      final order = Order.fromJson(json, items);
+      final idx = _orders.indexWhere((o) => o.id == order.id);
+      if (idx >= 0) {
+        _orders = List.from(_orders)..[idx] = order;
+      } else {
+        _orders = [order, ..._orders];
+      }
+      notifyListeners();
+      return order;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Place a new order via API
   Future<String> placeOrder({
     required List<Map<String, dynamic>> items, // [{product_id, quantity}]

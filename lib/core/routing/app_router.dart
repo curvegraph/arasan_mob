@@ -265,7 +265,10 @@ GoRouter createRouter(AuthProvider authProvider) {
             path: '/shop/order-success/:orderId',
             pageBuilder: (context, state) => _fadeSlideTransition(
               state,
-              OrderSuccessScreen(orderId: state.pathParameters['orderId']!),
+              OrderSuccessScreen(
+                orderId: state.pathParameters['orderId']!,
+                orderDbId: state.uri.queryParameters['oid'],
+              ),
             ),
           ),
           GoRoute(

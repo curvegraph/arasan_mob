@@ -23,18 +23,13 @@ class UserProductReviewsScreen extends StatefulWidget {
 
 class _UserProductReviewsScreenState extends State<UserProductReviewsScreen> {
   int? _selectedStarFilter;
-  String _writeButtonState = 'loading';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final provider = context.read<ReviewProvider>();
-      await provider.loadProductReviews(widget.productId);
-      if (!mounted) return;
-      final eligibility = await provider.reviewEligibility(widget.productId);
-      if (!mounted) return;
-      setState(() => _writeButtonState = eligibility.status);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // View-only here — reviews are written from My Orders after delivery.
+      context.read<ReviewProvider>().loadProductReviews(widget.productId);
     });
   }
 
@@ -69,30 +64,6 @@ class _UserProductReviewsScreenState extends State<UserProductReviewsScreen> {
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: Color(0xFFE2E8F0)),
         ),
-        actions: [
-          if (_writeButtonState == 'eligible' ||
-              _writeButtonState == 'already_reviewed')
-            TextButton.icon(
-              onPressed: () => context.push(
-                  '/shop/product/${widget.productId}/write-review'),
-              icon: Icon(
-                _writeButtonState == 'already_reviewed'
-                    ? Icons.edit_note
-                    : Icons.edit,
-                size: 18,
-                color: AppColors.userPrimary,
-              ),
-              label: Text(
-                _writeButtonState == 'already_reviewed'
-                    ? 'Edit Review'
-                    : 'Write Review',
-                style: const TextStyle(
-                    color: AppColors.userPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600),
-              ),
-            ),
-        ],
       ),
       backgroundColor: AppColors.background,
       body: CustomScrollView(
@@ -297,12 +268,9 @@ class _UserProductReviewsScreenState extends State<UserProductReviewsScreen> {
             ),
           ),
           const SizedBox(height: AppSpacing.sm),
-          Text(
-            _writeButtonState == 'eligible'
-                ? 'Be the first to review this product'
-                : 'Reviews appear here once buyers receive their order',
-            style: const TextStyle(
-                fontSize: 14, color: AppColors.textSecondary),
+          const Text(
+            'Reviews appear here once buyers receive their order',
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),
         ],
