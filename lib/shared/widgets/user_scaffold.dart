@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/product_provider.dart';
+import '../../features/products/widgets/product_filters_sheet.dart';
 import 'search_bar_button.dart';
 import 'user_app_bar.dart';
 import 'user_bottom_nav.dart';
@@ -69,6 +71,9 @@ class _UserScaffoldState extends State<UserScaffold> {
     // so a customer can search for another product from there.
     final isProductBrowsing =
         path == '/shop' || path.startsWith('/shop/products');
+    // On the product listing, the Filter button sits inline to the RIGHT of the
+    // search bar (the screen itself no longer shows a heading/filter bar).
+    final isProductListing = path.startsWith('/shop/products');
 
     return PopScope(
       // Let the system pop normally when the shell navigator has something to
@@ -110,12 +115,94 @@ class _UserScaffoldState extends State<UserScaffold> {
             // surfaces; other mobile pages have their own headers.
             else if (!isMobile || isProductBrowsing) ...[
               const UserAppBar(),
-              if (showSearchBar) const SearchBarButton(),
+              if (showSearchBar)
+                isProductListing
+                    ? const _SearchWithFilterRow()
+                    : const SearchBarButton(),
             ],
             Expanded(child: widget.child),
           ],
         ),
         bottomNavigationBar: showBottomNav ? const UserBottomNav() : null,
+      ),
+    );
+  }
+}
+
+/// Search bar + a Filter button to its right — shown on the product listing
+/// page. The listing screen no longer renders its own heading/filter bar, so
+/// filtering lives here next to the (shrunk) search field.
+class _SearchWithFilterRow extends StatelessWidget {
+  const _SearchWithFilterRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFilters = context.select<ProductProvider, bool>(
+        (p) => p.hasActiveFilters);
+
+    return Material(
+      color: AppColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            // Shrinks to make room for the filter button on the right.
+            const Expanded(child: SearchBarButton(compact: true)),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => ProductFiltersSheet.show(
+                context,
+                provider: context.read<ProductProvider>(),
+              ),
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: hasFilters
+                      ? AppColors.primary.withValues(alpha: 0.1)
+                      : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: hasFilters ? AppColors.primary : AppColors.border,
+                    width: 0.5,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.tune,
+                        size: 18,
+                        color: hasFilters
+                            ? AppColors.primary
+                            : AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Filter',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: hasFilters
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                    if (hasFilters) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

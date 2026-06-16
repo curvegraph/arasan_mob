@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_spacing.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/product.dart';
 import '../../../providers/cart_provider.dart';
@@ -14,10 +13,9 @@ import '../../../providers/auth_provider.dart';
 import '../../../shared/widgets/auth_gate.dart';
 import '../../../shared/widgets/product_card_mini.dart';
 import '../../../shared/widgets/product_placeholder_card.dart';
+import '../../../shared/widgets/empty_state.dart';
 import '../../auth/screens/login_dialog.dart';
 import '../widgets/filter_sidebar_panel.dart';
-import '../widgets/product_filters_sheet.dart';
-import '../widgets/sort_dropdown.dart';
 
 /// Product listing screen with filter sidebar and vertical grid cards.
 class ProductListingScreen extends StatefulWidget {
@@ -28,7 +26,6 @@ class ProductListingScreen extends StatefulWidget {
 }
 
 class _ProductListingScreenState extends State<ProductListingScreen> {
-  SortOption _currentSort = SortOption.popularity;
   final ScrollController _scrollController = ScrollController();
   bool _initialized = false;
 
@@ -76,6 +73,10 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
     super.dispose();
   }
 
+  /// Re-run the load for the current category/brand/all (used by the
+  /// "Network issue" retry button).
+  void _retryLoad() => _initFromQueryParams();
+
   void _onScroll() {
     if (!_scrollController.hasClients) return;
 
@@ -90,37 +91,6 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
     }
   }
 
-  void _onSortChanged(SortOption sort) {
-    setState(() => _currentSort = sort);
-
-    final provider = context.read<ProductProvider>();
-    switch (sort) {
-      case SortOption.popularity:
-        provider.changeSortOrder('display_order', true);
-        break;
-      case SortOption.newestFirst:
-        provider.changeSortOrder('created_at', false);
-        break;
-      case SortOption.priceLowToHigh:
-        provider.changeSortOrder('price', true);
-        break;
-      case SortOption.priceHighToLow:
-        provider.changeSortOrder('price', false);
-        break;
-    }
-  }
-
-  String _getTitle(ProductProvider provider) {
-    if (provider.filterCategory != null &&
-        provider.filterCategory!.isNotEmpty) {
-      return provider.filterCategory!;
-    }
-    if (provider.filterBrand != null && provider.filterBrand!.isNotEmpty) {
-      return provider.filterBrand!;
-    }
-    return 'All Products';
-  }
-
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ProductProvider>();
@@ -128,44 +98,10 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isWideScreen = screenWidth >= 768;
 
+    // No AppBar/heading: the shell (UserScaffold) shows the logo header +
+    // search bar with the Filter button beside it. The grid fills the body.
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        toolbarHeight: 70,
-        title: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _getTitle(provider),
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFF1A1A1A),
-                letterSpacing: -0.5,
-                height: 1.0,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${provider.paginatedProducts.length}${provider.hasMore ? '+' : ''} ${provider.paginatedProducts.length == 1 ? 'product' : 'products'}',
-              style: const TextStyle(
-                fontSize: 12,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: _buildSortFilterBar(isWideScreen, provider),
-        ),
-      ),
       body: isWideScreen
           ? _buildDesktopLayout(products, provider)
           : _buildMobileLayout(products, provider),
@@ -190,107 +126,42 @@ class _ProductListingScreenState extends State<ProductListingScreen> {
     return _buildProductGrid(products, provider);
   }
 
-  Widget _buildSortFilterBar(bool isWideScreen, ProductProvider provider) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.pagePadding,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.divider, width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          if (provider.paginatedProducts.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
-              child: Text(
-                '${provider.paginatedProducts.length}${provider.hasMore ? '+' : ''} results',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textTertiary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          Expanded(
-            child: SortDropdown(
-              selectedSort: _currentSort,
-              onSortChanged: _onSortChanged,
-            ),
-          ),
-          if (!isWideScreen) ...[
-            const SizedBox(width: AppSpacing.sm),
-            _buildFilterButton(provider),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFilterButton(ProductProvider provider) {
-    final hasFilters = provider.hasActiveFilters;
-
-    return GestureDetector(
-      onTap: () {
-        ProductFiltersSheet.show(context, provider: provider);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: hasFilters
-              ? AppColors.primary.withValues(alpha: 0.1)
-              : AppColors.surfaceVariant,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-          border: Border.all(
-            color: hasFilters ? AppColors.primary : AppColors.border,
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.tune,
-              size: 18,
-              color:
-                  hasFilters ? AppColors.primary : AppColors.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              'Filter',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: hasFilters
-                    ? AppColors.primary
-                    : AppColors.textSecondary,
-              ),
-            ),
-            if (hasFilters) ...[
-              const SizedBox(width: 4),
-              Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Build the product grid — no guest product limit, no guest scroll restriction
   Widget _buildProductGrid(List products, ProductProvider provider) {
     final category = provider.filterCategory;
-    final showPlaceholders = provider.isLoading || products.isEmpty;
+
+    // Once loading has finished and there are still no products, show a real
+    // message instead of an endless skeleton grid:
+    //  • a fetch error (no network / server) → "Network issue" + Retry
+    //  • genuinely empty category/filter      → "No products"
+    if (!provider.isLoading && products.isEmpty) {
+      if (provider.error != null) {
+        return EmptyState(
+          icon: Icons.wifi_off_rounded,
+          title: 'Network issue',
+          subtitle: 'Couldn\'t load products. Check your connection and try again.',
+          action: ElevatedButton.icon(
+            onPressed: _retryLoad,
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Retry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryLight,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        );
+      }
+      return EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'No products',
+        subtitle: (category != null && category.isNotEmpty)
+            ? 'No products found in "$category".'
+            : 'No products match the selected filters.',
+      );
+    }
+
+    // Skeletons ONLY while a load is actually in flight.
+    final showPlaceholders = provider.isLoading;
     final displayProducts = products;
 
     return LayoutBuilder(

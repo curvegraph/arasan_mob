@@ -202,6 +202,9 @@ class CategoryData {
   final String slug;
   final String? imageUrl;
   final String? iconName;
+  /// Null for top-level (main) categories; set for sub-categories. Used to fall
+  /// back to top-level-only when the admin hasn't curated the homepage strip.
+  final String? parentId;
 
   CategoryData({
     required this.id,
@@ -209,6 +212,7 @@ class CategoryData {
     required this.slug,
     this.imageUrl,
     this.iconName,
+    this.parentId,
   });
 
   factory CategoryData.fromJson(Map<String, dynamic> json) {
@@ -218,6 +222,7 @@ class CategoryData {
       slug: json['slug'] ?? '',
       imageUrl: json['image_url'],
       iconName: json['icon_name'],
+      parentId: json['parent_id'],
     );
   }
 }

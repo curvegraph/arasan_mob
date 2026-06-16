@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application
         android:label="arasan_user"
         android:name="${applicationName}"
@@ -35,6 +36,19 @@
                 <data
                     android:scheme="com.arasanmobiles.user"
                     android:host="login-callback" />
+            </intent-filter>
+
+            <!-- Deep link for product sharing — the web landing page's
+                 "Open in App" button fires
+                 com.arasanmobiles.user://product/<id>?variant=<variantId>.
+                 Handled by DeepLinkHandler → /shop/product/<id>. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="com.arasanmobiles.user"
+                    android:host="product" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

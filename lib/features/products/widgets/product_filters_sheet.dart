@@ -30,9 +30,6 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
   late Set<String> _selectedBrands;
   late double _minPrice;
   late double _maxPrice;
-  late double _minRating;
-  late double _minDiscount;
-  late bool _inStockOnly;
 
   ProductProvider get _provider => widget.provider;
 
@@ -53,9 +50,6 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
     _selectedBrands = Set.from(_provider.selectedFilterBrands);
     _minPrice = _provider.minPrice;
     _maxPrice = _provider.maxPrice;
-    _minRating = _provider.minRating;
-    _minDiscount = _provider.minDiscount;
-    _inStockOnly = _provider.inStockOnly;
   }
 
   void _clearAll() {
@@ -63,9 +57,6 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
       _selectedBrands = {};
       _minPrice = 0;
       _maxPrice = 200000;
-      _minRating = 0;
-      _minDiscount = 0;
-      _inStockOnly = false;
     });
   }
 
@@ -74,9 +65,9 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
       brands: _selectedBrands,
       minPrice: _minPrice,
       maxPrice: _maxPrice,
-      minRating: _minRating,
-      minDiscount: _minDiscount,
-      inStockOnly: _inStockOnly,
+      minRating: 0,
+      minDiscount: 0,
+      inStockOnly: false,
     );
     Navigator.of(context).pop();
   }
@@ -147,6 +138,36 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                   controller: scrollController,
                   padding: const EdgeInsets.all(AppSpacing.md),
                   children: [
+                    // Categories (single-select; web parity). Tapping applies
+                    // immediately and closes the sheet so the new category's
+                    // products load — like navigating on the web.
+                    if (_provider.availableCategories.isNotEmpty) ...[
+                      _buildSectionTitle('Categories'),
+                      const SizedBox(height: AppSpacing.sm),
+                      _buildCheckboxTile(
+                        label: 'All Categories',
+                        isSelected: (_provider.filterCategory ?? '').isEmpty,
+                        onTap: () {
+                          _provider.setFilterCategory(null);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                      ..._provider.availableCategories.map((cat) {
+                        final isSelected =
+                            (_provider.filterCategory ?? '').toLowerCase() ==
+                                cat.toLowerCase();
+                        return _buildCheckboxTile(
+                          label: cat,
+                          isSelected: isSelected,
+                          onTap: () {
+                            _provider.setFilterCategory(cat);
+                            Navigator.of(context).pop();
+                          },
+                        );
+                      }),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+
                     // Price filter
                     _buildSectionTitle('Price'),
                     const SizedBox(height: AppSpacing.sm),
@@ -219,53 +240,6 @@ class _ProductFiltersSheetState extends State<ProductFiltersSheet> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                     ],
-
-                    // Customer Rating
-                    _buildSectionTitle('Customer Ratings'),
-                    const SizedBox(height: AppSpacing.sm),
-                    ...[4.0, 3.0, 2.0, 1.0].map((rating) {
-                      final isSelected = _minRating == rating;
-                      return _buildCheckboxTile(
-                        label: '${rating.toInt()}\u2605 & above',
-                        isSelected: isSelected,
-                        onTap: () {
-                          setState(() {
-                            _minRating = isSelected ? 0 : rating;
-                          });
-                        },
-                      );
-                    }),
-
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Discount
-                    _buildSectionTitle('Discount'),
-                    const SizedBox(height: AppSpacing.sm),
-                    ...[10.0, 20.0, 30.0, 40.0, 50.0].map((discount) {
-                      final isSelected = _minDiscount == discount;
-                      return _buildCheckboxTile(
-                        label: '${discount.toInt()}% or more',
-                        isSelected: isSelected,
-                        onTap: () {
-                          setState(() {
-                            _minDiscount = isSelected ? 0 : discount;
-                          });
-                        },
-                      );
-                    }),
-
-                    const SizedBox(height: AppSpacing.lg),
-
-                    // Availability
-                    _buildSectionTitle('Availability'),
-                    const SizedBox(height: AppSpacing.sm),
-                    _buildCheckboxTile(
-                      label: 'Exclude Out of Stock',
-                      isSelected: _inStockOnly,
-                      onTap: () {
-                        setState(() => _inStockOnly = !_inStockOnly);
-                      },
-                    ),
 
                     const SizedBox(height: AppSpacing.xxl),
                   ],

@@ -41,6 +41,21 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.arasanmobiles.user</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Custom scheme for OAuth callback + product deep links
+				     (com.arasanmobiles.user://product/<id>?variant=<id>). -->
+				<string>com.arasanmobiles.user</string>
+			</array>
+		</dict>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

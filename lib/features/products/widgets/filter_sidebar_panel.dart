@@ -59,6 +59,14 @@ class FilterSidebarPanel extends StatelessWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
+                // CATEGORIES section (single-select; web parity). Shown global,
+                // so the shopper can switch category from inside the filter.
+                if (provider.availableCategories.isNotEmpty)
+                  _FilterSection(
+                    title: 'CATEGORIES',
+                    child: _CategoryFilterSection(provider: provider),
+                  ),
+
                 // PRICE section
                 _FilterSection(
                   title: 'PRICE',
@@ -71,24 +79,6 @@ class FilterSidebarPanel extends StatelessWidget {
                     title: 'BRAND',
                     child: _BrandFilterSection(provider: provider),
                   ),
-
-                // CUSTOMER RATINGS
-                _FilterSection(
-                  title: 'CUSTOMER RATINGS',
-                  child: _RatingFilterSection(provider: provider),
-                ),
-
-                // DISCOUNT
-                _FilterSection(
-                  title: 'DISCOUNT',
-                  child: _DiscountFilterSection(provider: provider),
-                ),
-
-                // AVAILABILITY
-                _FilterSection(
-                  title: 'AVAILABILITY',
-                  child: _AvailabilityFilterSection(provider: provider),
-                ),
 
                 const SizedBox(height: AppSpacing.xl),
               ],
@@ -177,6 +167,35 @@ class _PriceFilterSection extends StatelessWidget {
   }
 }
 
+/// Single-select category list. Selecting one reloads the listing for that
+/// category (and rescopes the brand facet). "All Categories" clears it.
+class _CategoryFilterSection extends StatelessWidget {
+  final ProductProvider provider;
+
+  const _CategoryFilterSection({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final current = (provider.filterCategory ?? '').toLowerCase();
+    return Column(
+      children: [
+        _FilterCheckbox(
+          label: 'All Categories',
+          isSelected: current.isEmpty,
+          onTap: () => provider.setFilterCategory(null),
+        ),
+        ...provider.availableCategories.map((cat) {
+          return _FilterCheckbox(
+            label: cat,
+            isSelected: current == cat.toLowerCase(),
+            onTap: () => provider.setFilterCategory(cat),
+          );
+        }),
+      ],
+    );
+  }
+}
+
 /// Dynamic brand checkbox list.
 class _BrandFilterSection extends StatelessWidget {
   final ProductProvider provider;
@@ -198,83 +217,16 @@ class _BrandFilterSection extends StatelessWidget {
   }
 }
 
-/// Customer rating filter (4★ & above, 3★ & above, etc).
-class _RatingFilterSection extends StatelessWidget {
-  final ProductProvider provider;
-
-  const _RatingFilterSection({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [4.0, 3.0, 2.0, 1.0].map((rating) {
-        final isSelected = provider.minRating == rating;
-        return _FilterCheckbox(
-          label: '${rating.toInt()}\u2605 & above',
-          isSelected: isSelected,
-          onTap: () => provider.setMinRating(rating),
-          leading: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(
-              rating.toInt(),
-              (_) => const Icon(Icons.star, size: 14, color: AppColors.rating),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-/// Discount filter (10% or more, 20% or more, etc).
-class _DiscountFilterSection extends StatelessWidget {
-  final ProductProvider provider;
-
-  const _DiscountFilterSection({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [10.0, 20.0, 30.0, 40.0, 50.0].map((discount) {
-        final isSelected = provider.minDiscount == discount;
-        return _FilterCheckbox(
-          label: '${discount.toInt()}% or more',
-          isSelected: isSelected,
-          onTap: () => provider.setMinDiscount(discount),
-        );
-      }).toList(),
-    );
-  }
-}
-
-/// In-stock toggle.
-class _AvailabilityFilterSection extends StatelessWidget {
-  final ProductProvider provider;
-
-  const _AvailabilityFilterSection({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    return _FilterCheckbox(
-      label: 'Exclude Out of Stock',
-      isSelected: provider.inStockOnly,
-      onTap: () => provider.toggleInStockOnly(),
-    );
-  }
-}
-
 /// Reusable checkbox row for filter items.
 class _FilterCheckbox extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
-  final Widget? leading;
 
   const _FilterCheckbox({
     required this.label,
     required this.isSelected,
     required this.onTap,
-    this.leading,
   });
 
   @override
@@ -303,10 +255,6 @@ class _FilterCheckbox extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            if (leading != null) ...[
-              leading!,
-              const SizedBox(width: 4),
-            ],
             Expanded(
               child: Text(
                 label,

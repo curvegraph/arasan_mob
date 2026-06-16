@@ -43,10 +43,14 @@ class CategoriesSection extends StatelessWidget {
           .whereType<CategoryData>()
           .toList();
       // Safety net: only if NONE of the curated ids resolve (fully stale
-      // config) fall back to all categories, so the strip is never empty.
-      if (categories.isEmpty) categories = allCategories;
+      // config) fall back to top-level categories, so the strip is never empty.
+      if (categories.isEmpty) {
+        categories = allCategories.where((c) => c.parentId == null).toList();
+      }
     } else {
-      categories = allCategories;
+      // No admin curation → show only top-level (main) categories, matching the
+      // web storefront (`categoryPool.filter(c => !c.parent_id)`).
+      categories = allCategories.where((c) => c.parentId == null).toList();
     }
 
     // Design config

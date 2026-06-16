@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../providers/homepage_provider.dart';
+import '../../../shared/widgets/empty_state.dart';
 import '../widgets/banner_section.dart';
 import '../widgets/single_banner_section.dart';
 import '../widgets/categories_section.dart';
@@ -111,9 +112,11 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.symmetric(horizontal: hPad),
-                  sliver: SliverMainAxisGroup(
-                    slivers: _buildSliverSections(sections),
-                  ),
+                  sliver: sections.isNotEmpty
+                      ? SliverMainAxisGroup(
+                          slivers: _buildSliverSections(sections),
+                        )
+                      : _buildEmptyHomepage(homepageProvider),
                 ),
               ],
             );
@@ -167,6 +170,39 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Homepage body when there are NO sections to render. We show ONLY what the
+  /// admin configures — no synthetic "Latest products" grid. So:
+  ///  • still loading        → skeleton silhouette
+  ///  • otherwise (empty OR a load that returned nothing) → a retry-able state,
+  ///    so pulling/refreshing re-fetches the admin's real sections.
+  Widget _buildEmptyHomepage(HomepageProvider provider) {
+    if (provider.isLoading || !provider.hasData) {
+      return SliverToBoxAdapter(child: _buildLoadingSkeleton());
+    }
+    final isError = provider.error != null;
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: EmptyState(
+        icon: isError ? Icons.wifi_off_rounded : Icons.storefront_outlined,
+        title: isError ? "Can't reach the store" : 'Nothing here yet',
+        // Wording matches the web storefront's homepage network-error state.
+        subtitle: isError
+            ? "We couldn't load the latest products. Please check your "
+                'internet connection and try again.'
+            : 'Pull down to refresh.',
+        action: ElevatedButton.icon(
+          onPressed: () => provider.refresh(),
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Retry'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryLight,
+            foregroundColor: Colors.white,
+          ),
+        ),
       ),
     );
   }

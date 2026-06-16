@@ -1,0 +1,12 @@
+{
+  "_comment": "ADD this rewrite to your EXISTING firebase.json `hosting` block — do NOT replace the whole file, or you will wipe the live storefront at arasanmobiles.in. Order matters: this rewrite must come BEFORE any catch-all SPA rewrite. Also copy web_landing/product.html into your Firebase Hosting `public` directory.",
+
+  "hosting": {
+    "rewrites": [
+      {
+        "source": "/product/**",
+        "destination": "/product.html"
+      }
+    ]
+  }
+}

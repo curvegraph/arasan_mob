@@ -38,5 +38,13 @@ String slugifyProduct(Product product) {
 /// Canonical, OpenGraph-enabled product URL — the same `/product/<slug>/p/<id>`
 /// permalink the web app exposes, so a shared link unfurls with the product
 /// image/title/description preview. Mirrors the web app's `productUrl`.
-String productShareUrl(Product product) =>
-    '$kStorefrontOrigin/product/${slugifyProduct(product)}/p/${product.id}';
+///
+/// When [variantId] is supplied (the shopper had a specific variant selected on
+/// the PDP), it is appended as `?variant=<id>` so the shared link reopens the
+/// exact variant — both the web PDP and the native app read this query param.
+String productShareUrl(Product product, {String? variantId}) {
+  final base =
+      '$kStorefrontOrigin/product/${slugifyProduct(product)}/p/${product.id}';
+  if (variantId == null || variantId.isEmpty) return base;
+  return '$base?variant=${Uri.encodeQueryComponent(variantId)}';
+}

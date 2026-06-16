@@ -123,9 +123,14 @@ GoRouter createRouter(AuthProvider authProvider) {
       // com.arasanmobiles.user://login-callback/?code=... — Supabase did NOT
       // auto-exchange it, so we hand the full URI to getSessionFromUrl here.
       // Fire-and-forget; AuthProvider's listener will pick up the new session.
-      final isOAuthCallback = uri.scheme == 'com.arasanmobiles.user' ||
-          uri.host == 'login-callback' ||
-          path == '/login-callback';
+      //
+      // Match ONLY the auth callback — the same custom scheme is also used for
+      // product deep links (com.arasanmobiles.user://product/<id>), which are
+      // handled by DeepLinkHandler and must not be redirected to /shop here.
+      final isOAuthCallback = uri.host == 'login-callback' ||
+          path == '/login-callback' ||
+          (uri.scheme == 'com.arasanmobiles.user' &&
+              uri.queryParameters['code'] != null);
       if (isOAuthCallback) {
         if (uri.queryParameters['code'] != null) {
           Supabase.instance.client.auth.getSessionFromUrl(uri).then(

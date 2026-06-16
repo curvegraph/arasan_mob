@@ -39,6 +39,11 @@ class _UserOrdersScreenState extends State<UserOrdersScreen> {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 70,
+        // Never show an auto back arrow — it shifted the title right when this
+        // page was reached from Account (push) vs the bottom-nav tab (go). The
+        // heading now sits at the same left position both ways. System back /
+        // bottom-nav still navigate away.
+        automaticallyImplyLeading: false,
         title: const Text(
           'My Orders',
           style: TextStyle(

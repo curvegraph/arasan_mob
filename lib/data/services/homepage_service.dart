@@ -40,10 +40,13 @@ class HomepageService {
 
   Future<List<CategoryData>> getCategories({int limit = 100}) async {
     try {
-      // High limit so ALL categories load (the homepage section then decides
-      // how many to show). The old default of 8 silently dropped categories.
-      final data = await _api.get('/categories/root',
-          queryParams: {'limit': '$limit'});
+      // Fetch the FLAT list of ALL categories (root + sub-categories), matching
+      // the web storefront (`/categories?flat=true`). The homepage section then
+      // shows the admin-curated `selected_categories` (which can include
+      // sub-categories) and falls back to top-level only. `/categories/root`
+      // hid every sub-category, so admin-ticked sub-categories never appeared.
+      final data = await _api.get('/categories',
+          queryParams: {'flat': 'true', 'limit': '$limit'});
       final list = (data is Map && data['categories'] is List)
           ? data['categories'] as List
           : (data is List ? data : const []);

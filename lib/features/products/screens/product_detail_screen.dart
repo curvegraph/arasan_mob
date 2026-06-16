@@ -219,7 +219,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   /// (`/product/<slug>/p/<id>`), so the link unfurls into a rich preview
   /// (image/title/description) on WhatsApp and other platforms.
   Future<void> _shareProduct(Product product) async {
-    final url = productShareUrl(product);
+    final url = productShareUrl(product, variantId: _selectedVariant?.id);
     final text = '${product.name}\n$url';
     context.read<SharedProvider>().add(product.id);
     await Share.share(text, subject: product.name);

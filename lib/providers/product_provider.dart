@@ -346,13 +346,20 @@ class ProductProvider extends ChangeNotifier {
     _availableCategories = [];
 
     try {
-      // Fetch brands and products in parallel
+      // Fetch brands, the GLOBAL category list (for the in-filter category
+      // selector — web parity, shown regardless of the current category) and
+      // products in parallel.
       final brandsFuture = (category != null && category.isNotEmpty)
           ? _productService.getBrandsForCategory(category)
           : _productService.getUniqueBrands();
 
-      final results = await Future.wait([brandsFuture, _loadProductsInternal()]);
+      final results = await Future.wait([
+        brandsFuture,
+        _productService.getUniqueCategories(),
+        _loadProductsInternal(),
+      ]);
       _availableBrands = results[0] as List<String>;
+      _availableCategories = results[1] as List<String>;
     } catch (e) {
       _error = 'Failed to load products: $e';
       _isLoading = false;
