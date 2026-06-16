@@ -188,12 +188,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       hasScrollBody: false,
       child: EmptyState(
         icon: isError ? Icons.wifi_off_rounded : Icons.storefront_outlined,
-        title: isError ? "Can't reach the store" : 'Nothing here yet',
-        // Wording matches the web storefront's homepage network-error state.
+        // Network problem → "Network issue"; admin configured nothing →
+        // "Store opening soon".
+        title: isError ? 'Network issue' : 'Store opening soon',
         subtitle: isError
-            ? "We couldn't load the latest products. Please check your "
-                'internet connection and try again.'
-            : 'Pull down to refresh.',
+            ? 'Please check your connection and try again.'
+            : 'Products will be available shortly.',
         action: ElevatedButton.icon(
           onPressed: () => provider.refresh(),
           icon: const Icon(Icons.refresh, size: 18),

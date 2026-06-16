@@ -103,17 +103,19 @@ class HomepageService {
   }
 
   Future<List<HomepageSection>> getSections() async {
-    try {
-      final data = await _api.get('/homepage/sections');
-      final list = (data is Map && data['sections'] is List)
-          ? data['sections'] as List
-          : (data is List ? data : const []);
-      return list
-          .whereType<Map>()
-          .map((e) => HomepageSection.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-    } catch (_) {
-      return [];
-    }
+    // NOTE: errors are intentionally NOT swallowed here. A failed fetch must
+    // propagate so the homepage shows the "Can't reach the store" network state
+    // (with Retry) — not a misleading "Nothing here yet", which previously
+    // appeared whenever the request failed (e.g. flaky connection) and got
+    // turned into an empty list. An empty list now means a genuine success with
+    // no sections configured.
+    final data = await _api.get('/homepage/sections');
+    final list = (data is Map && data['sections'] is List)
+        ? data['sections'] as List
+        : (data is List ? data : const []);
+    return list
+        .whereType<Map>()
+        .map((e) => HomepageSection.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 }
