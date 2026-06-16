@@ -58,15 +58,18 @@ class _LoginDialogState extends State<LoginDialog> {
     final success = await phoneAuth.verifyOTP(_otpController.text);
     if (!success || !mounted) return;
 
-    final userInfo = phoneAuth.firebaseUserInfo;
+    final idToken = await phoneAuth.getIdToken();
+    if (idToken == null || !mounted) return;
     final auth = context.read<AuthProvider>();
-    await auth.loginWithFirebasePhone(
-      uid: userInfo['uid']!,
-      phone: userInfo['phone'] ?? '+91${phoneAuth.phoneNumber}',
-      name: userInfo['name'],
-    );
+    await auth.loginWithFirebasePhone(idToken: idToken);
     phoneAuth.reset();
-    if (mounted) Navigator.pop(context, true);
+    if (!mounted) return;
+    if (auth.isLoggedIn && auth.needsProfileCompletion) {
+      Navigator.pop(context, true);
+      context.push('/shop/complete-profile');
+    } else {
+      Navigator.pop(context, true);
+    }
   }
 
   @override

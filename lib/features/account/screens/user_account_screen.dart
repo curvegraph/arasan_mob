@@ -450,6 +450,35 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
   }
 }
 
+/// True for placeholder names the backend auto-fills for freshly-created
+/// phone-auth customers ("Customer"). We treat these as "no real name yet"
+/// and hide them in the UI until the user enters their own.
+bool _isPlaceholderName(String? name) {
+  final n = (name ?? '').trim().toLowerCase();
+  return n.isEmpty || n == 'customer';
+}
+
+/// True for the synthetic email minted for phone-only sign-ins
+/// (`phone-<digits>@phone.arasanmobiles.invalid`). Never a real address —
+/// show nothing until the user enters their own.
+bool _isPlaceholderEmail(String? email) {
+  final e = (email ?? '').trim().toLowerCase();
+  return e.isEmpty || e.endsWith('@phone.arasanmobiles.invalid');
+}
+
+String _realName(String? name) =>
+    _isPlaceholderName(name) ? '' : name!.trim();
+
+String _realEmail(String? email) =>
+    _isPlaceholderEmail(email) ? '' : email!.trim();
+
+/// Validates an email *if* one is supplied. Returns null (valid) on empty
+/// input — phone-only signups never need a real email.
+String? _optionalEmail(String? value) {
+  if (value == null || value.trim().isEmpty) return null;
+  return Validators.email(value);
+}
+
 // ─── My Details Panel (like the reference screenshot) ───
 class _MyDetailsPanel extends StatefulWidget {
   final AuthProvider auth;
@@ -470,7 +499,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
   late TextEditingController _cityController;
   late TextEditingController _stateController;
   late TextEditingController _pincodeController;
-  String _gender = 'Male';
+  String _gender = '';
   bool _isSaving = false;
   bool _isEditing = false;
   bool _editModeInitialized = false;
@@ -481,12 +510,13 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
     super.initState();
     final provider = context.read<UserProfileProvider>();
     final profile = provider.profile;
-    final nameParts = profile.name.split(' ');
+    final realName = _realName(profile.name);
+    final nameParts = realName.isEmpty ? <String>[''] : realName.split(' ');
     _firstNameController = TextEditingController(text: nameParts.first);
     _lastNameController = TextEditingController(
       text: nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '',
     );
-    _emailController = TextEditingController(text: profile.email);
+    _emailController = TextEditingController(text: _realEmail(profile.email));
     _phoneController = TextEditingController(text: profile.phone);
 
     final addr = provider.defaultAddress;
@@ -496,10 +526,10 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
     _stateController = TextEditingController(text: addr?.state ?? '');
     _pincodeController = TextEditingController(text: addr?.pincode ?? '');
 
-    // New users (no saved name AND no saved address) start in edit mode so
-    // they can immediately fill in their details. Returning users start in
-    // read-only view mode — tap Edit to modify.
-    _isEditing = profile.name.trim().isEmpty && addr == null;
+    // New users (no real saved name AND no saved address) start in edit
+    // mode so they can immediately fill in their details. Returning users
+    // start in read-only view mode — tap Edit to modify.
+    _isEditing = _isPlaceholderName(profile.name) && addr == null;
     if (profile.id.isNotEmpty) {
       _editModeInitialized = true;
     }
@@ -527,7 +557,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
     // edit mode based on whether the user already has saved data.
     if (!_editModeInitialized && profile.id.isNotEmpty) {
       setState(() {
-        _isEditing = profile.name.trim().isEmpty && addr == null;
+        _isEditing = _isPlaceholderName(profile.name) && addr == null;
         _editModeInitialized = true;
       });
     }
@@ -565,9 +595,13 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
       final phone = _phoneController.text.trim();
       final provider = context.read<UserProfileProvider>();
 
+      final typedEmail = _emailController.text.trim();
       await provider.updateProfile(
         name: fullName,
-        email: _emailController.text.trim(),
+        // Skip the field entirely when the user left it blank — we don't
+        // want to overwrite the backend's synthetic phone-auth email with
+        // an empty string.
+        email: typedEmail.isEmpty ? null : typedEmail,
         phone: phone,
       );
 
@@ -624,7 +658,8 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
   }
 
   void _syncControllersFromProfile(UserProfile profile, UserAddress? addr) {
-    final parts = profile.name.split(' ');
+    final realName = _realName(profile.name);
+    final parts = realName.isEmpty ? <String>[''] : realName.split(' ');
     final first = parts.first;
     final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
 
@@ -634,7 +669,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
 
     sync(_firstNameController, first);
     sync(_lastNameController, last);
-    sync(_emailController, profile.email);
+    sync(_emailController, _realEmail(profile.email));
     sync(_phoneController, profile.phone);
     sync(_addressLine1Controller, addr?.addressLine1 ?? '');
     sync(_addressLine2Controller, addr?.addressLine2 ?? '');
@@ -647,7 +682,10 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
   Widget build(BuildContext context) {
     final provider = context.watch<UserProfileProvider>();
     final profile = provider.profile;
-    final initial = profile.name.isNotEmpty ? profile.name[0].toUpperCase() : 'U';
+    final displayName = _realName(profile.name);
+    final displayEmail = _realEmail(profile.email);
+    final initial =
+        displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 768;
 
@@ -719,16 +757,18 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        profile.name.isNotEmpty ? profile.name : 'User',
-                        style: const TextStyle(
+                        displayName.isNotEmpty ? displayName : 'Your name',
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: displayName.isNotEmpty
+                              ? AppColors.textPrimary
+                              : AppColors.textTertiary,
                         ),
                       ),
-                      if (profile.email.isNotEmpty)
+                      if (displayEmail.isNotEmpty)
                         Text(
-                          profile.email,
+                          displayEmail,
                           style: const TextStyle(
                             fontSize: 13,
                             color: AppColors.textSecondary,
@@ -766,7 +806,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
               ),
               const SizedBox(height: 20),
               // Row 3: Email (full width)
-              _buildField('Email address', _emailController, keyboardType: TextInputType.emailAddress, validator: Validators.email),
+              _buildField('Email address (optional)', _emailController, keyboardType: TextInputType.emailAddress, validator: _optionalEmail),
               const SizedBox(height: 28),
               _buildAddressHeader(),
               const SizedBox(height: 16),
@@ -792,7 +832,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
               const SizedBox(height: 16),
               _buildField('Phone number', _phoneController, keyboardType: TextInputType.phone),
               const SizedBox(height: 16),
-              _buildField('Email address', _emailController, keyboardType: TextInputType.emailAddress, validator: Validators.email),
+              _buildField('Email address (optional)', _emailController, keyboardType: TextInputType.emailAddress, validator: _optionalEmail),
               const SizedBox(height: 24),
               _buildAddressHeader(),
               const SizedBox(height: 12),
@@ -920,14 +960,15 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: _gender,
+          value: _gender.isEmpty ? null : _gender,
+          hint: const Text('Select', style: TextStyle(fontSize: 14)),
           items: const [
             DropdownMenuItem(value: 'Male', child: Text('Male')),
             DropdownMenuItem(value: 'Female', child: Text('Female')),
             DropdownMenuItem(value: 'Other', child: Text('Other')),
           ],
           onChanged: _isEditing
-              ? (val) => setState(() => _gender = val ?? 'Male')
+              ? (val) => setState(() => _gender = val ?? '')
               : null,
           style: TextStyle(
             fontSize: 15,
@@ -975,7 +1016,8 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
   }
 
   Widget _buildReadOnlyView(UserProfile profile, UserAddress? addr) {
-    final parts = profile.name.split(' ');
+    final realName = _realName(profile.name);
+    final parts = realName.isEmpty ? <String>[''] : realName.split(' ');
     final first = parts.first;
     final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
     final addressLines = <String>[];
@@ -992,7 +1034,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
         _readOnlyRow('Last name', last),
         _readOnlyRow('Gender', _gender),
         _readOnlyRow('Phone number', profile.phone),
-        _readOnlyRow('Email address', profile.email),
+        _readOnlyRow('Email address', _realEmail(profile.email)),
         const SizedBox(height: 20),
         _buildAddressHeader(),
         const SizedBox(height: 8),

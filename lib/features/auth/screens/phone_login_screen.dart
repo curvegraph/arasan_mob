@@ -43,20 +43,18 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     final phoneAuth = context.read<PhoneAuthProvider>();
     final success = await phoneAuth.verifyOTP(_otpController.text);
     if (success && mounted) {
-      // Sync Firebase user with main AuthProvider
-      final userInfo = phoneAuth.firebaseUserInfo;
+      final idToken = await phoneAuth.getIdToken();
+      if (idToken == null || !mounted) return;
       final auth = context.read<AuthProvider>();
-
-      // Sign in to main app auth using Firebase phone user info
-      await auth.loginWithFirebasePhone(
-        uid: userInfo['uid']!,
-        phone: userInfo['phone'] ?? '+91${phoneAuth.phoneNumber}',
-        name: userInfo['name'],
-      );
+      await auth.loginWithFirebasePhone(idToken: idToken);
 
       phoneAuth.reset();
       if (!mounted) return;
-      context.go('/shop');
+      if (auth.isLoggedIn && auth.needsProfileCompletion) {
+        context.go('/shop/complete-profile');
+      } else {
+        context.go('/shop');
+      }
     }
   }
 

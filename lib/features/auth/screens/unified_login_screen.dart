@@ -31,6 +31,12 @@ class _UnifiedLoginScreenState extends State<UnifiedLoginScreen>
   late final AnimationController _meshController;
   late final AnimationController _floatController;
 
+  /// True between OTP verify success and the navigation away from this
+  /// screen. Drives the full-screen "Signing you in" overlay so the user
+  /// doesn't see the phone-entry view flash back while the backend exchange
+  /// + profile hydration are still in flight.
+  bool _finalizing = false;
+
   @override
   void initState() {
     super.initState();
@@ -74,17 +80,23 @@ class _UnifiedLoginScreenState extends State<UnifiedLoginScreen>
   Future<void> _verifyOTP() async {
     final phoneAuth = context.read<PhoneAuthProvider>();
     final success = await phoneAuth.verifyOTP(_otpController.text);
-    if (success && mounted) {
-      final userInfo = phoneAuth.firebaseUserInfo;
+    if (!success || !mounted) return;
+
+    setState(() => _finalizing = true);
+    try {
+      final idToken = await phoneAuth.getIdToken();
+      if (idToken == null || !mounted) return;
       final auth = context.read<AuthProvider>();
-      await auth.loginWithFirebasePhone(
-        uid: userInfo['uid']!,
-        phone: userInfo['phone'] ?? '+91${phoneAuth.phoneNumber}',
-        name: userInfo['name'],
-      );
-      phoneAuth.reset();
+      await auth.loginWithFirebasePhone(idToken: idToken);
       if (!mounted) return;
-      _exitAfterLogin();
+      if (auth.isLoggedIn && auth.needsProfileCompletion) {
+        context.go('/shop/complete-profile');
+      } else {
+        _exitAfterLogin();
+      }
+      phoneAuth.reset();
+    } catch (_) {
+      if (mounted) setState(() => _finalizing = false);
     }
   }
 
@@ -181,6 +193,41 @@ class _UnifiedLoginScreenState extends State<UnifiedLoginScreen>
               ),
             ),
           ),
+          // Layer 5: finalize overlay — blocks input + hides UI flashes
+          // between OTP success and navigation
+          if (_finalizing)
+            Positioned.fill(
+              child: AbsorbPointer(
+                child: ColoredBox(
+                  color: Colors.black54,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        SizedBox(
+                          height: 44,
+                          width: 44,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Signing you in…',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

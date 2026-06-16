@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../data/services/api_service.dart';
+import '../data/services/api_service.dart' show ApiService, ApiException;
 
 /// AuthProvider — single source of truth for "who is signed in".
 ///
@@ -117,6 +117,22 @@ class AuthProvider extends ChangeNotifier {
   String? get authToken => _userId; // legacy alias — callers want a stable id
   bool get isCustomer => _isLoggedIn;
   bool get isDemoMode => _isDemoMode;
+
+  /// True when the customer row still has the backend's placeholder name
+  /// (or no name at all) — i.e. they signed in via phone OTP but haven't
+  /// filled in their real name yet. Drives the profile-completion redirect.
+  bool get needsProfileCompletion {
+    if (!_isLoggedIn || _isDemoMode) return false;
+    final n = _userName?.trim() ?? '';
+    return n.isEmpty || n.toLowerCase() == 'customer';
+  }
+
+  /// Public refresh — pulls the latest profile from `/auth/me`. Called after
+  /// the profile-completion screen so the in-memory name updates immediately.
+  Future<void> refreshProfile() async {
+    await _hydrateFromBackend();
+    notifyListeners();
+  }
 
   void clearError() {
     _error = null;
@@ -354,22 +370,29 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> loginAsCustomer(String phone, String otp) =>
       verifyOtp(phone, otp);
 
-  /// Login after Firebase Phone Auth verifies on-device. Calls the backend's
-  /// `/auth/phone-sync` to mint a Supabase session, then hydrates from
+  /// Login after Firebase Phone Auth verifies on-device. Trades the Firebase
+  /// ID token for a Supabase session via `/auth/firebase-phone-exchange`,
+  /// installs that session into the Supabase client, then hydrates from
   /// `/auth/me` for canonical profile state.
-  Future<void> loginWithFirebasePhone({
-    required String uid,
-    required String phone,
-    String? name,
-  }) async {
+  Future<void> loginWithFirebasePhone({required String idToken}) async {
     try {
-      await _api.post('/auth/phone-sync',
-          body: {'uid': uid, 'phone': phone, if (name != null) 'name': name});
+      final data =
+          await _api.post('/auth/firebase-phone-exchange', body: {'idToken': idToken});
+      final session = (data is Map && data['session'] is Map)
+          ? Map<String, dynamic>.from(data['session'] as Map)
+          : null;
+      final refreshToken = session?['refreshToken'] as String?;
+      if (refreshToken == null || refreshToken.isEmpty) {
+        throw ApiException('Phone exchange returned no refresh token');
+      }
+      await _supabase.auth.setSession(refreshToken);
     } catch (e) {
-      debugPrint('phone-sync failed: $e');
+      debugPrint('firebase-phone-exchange failed: $e');
+      _error = 'Sign-in failed. Please try again.';
+      await _signOutLocalAndRemote();
+      notifyListeners();
+      return;
     }
-    // Whether or not phone-sync set up a Supabase session, ask the backend
-    // who we are. If we don't have a token, _hydrateFromBackend signs us out.
     await _hydrateFromBackend();
     notifyListeners();
   }

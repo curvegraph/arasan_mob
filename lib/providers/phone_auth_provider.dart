@@ -1,14 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../data/services/api_service.dart';
 import '../data/services/firebase_phone_auth_service.dart';
 
-/// Provider for Firebase Phone OTP authentication.
-/// After Firebase phone auth succeeds, it also creates/links the user
-/// row in the backend so the rest of the app (orders, cart, etc.) works.
+/// Provider for Firebase Phone OTP authentication. Owns only the Firebase
+/// side of phone login — once OTP succeeds, callers fetch the Firebase ID
+/// token via [getIdToken] and hand it to AuthProvider, which exchanges it
+/// for a Supabase session via `/auth/firebase-phone-exchange`.
 class PhoneAuthProvider extends ChangeNotifier {
   final FirebasePhoneAuthService _service = FirebasePhoneAuthService();
-  final ApiService _api = ApiService();
 
   bool _isLoading = false;
   bool _codeSent = false;
@@ -74,10 +73,10 @@ class PhoneAuthProvider extends ChangeNotifier {
         _isLoading = true;
         notifyListeners();
         try {
-          final userCred = await _service.signInWithCredential(credential);
-          await _syncWithSupabase(userCred);
-          _isLoading = false;
-          _codeSent = false;
+          await _service.signInWithCredential(credential);
+          // Keep `_codeSent` true and `_isLoading` true so the OTP step stays
+          // on-screen (with the spinner) while the caller finishes the
+          // exchange + navigation. `reset()` is the explicit cleanup.
           notifyListeners();
         } catch (e) {
           _error = 'Auto-verification failed: ${e.toString()}';
@@ -118,13 +117,15 @@ class PhoneAuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final userCred = await _service.verifyOTP(
+      await _service.verifyOTP(
         verificationId: _verificationId!,
         smsCode: trimmed,
       );
-      await _syncWithSupabase(userCred);
-      _isLoading = false;
-      _codeSent = false;
+      // Don't clear `_codeSent` / `_isLoading` here — the caller still has
+      // work to do (exchange the ID token for a Supabase session, hydrate
+      // profile, navigate). Keeping the OTP step + spinner visible prevents
+      // the login UI from flashing back to the phone-entry state while
+      // that async work runs. `reset()` is the explicit cleanup.
       notifyListeners();
       return true;
     } on FirebaseAuthException catch (e) {
@@ -149,35 +150,10 @@ class PhoneAuthProvider extends ChangeNotifier {
     }
   }
 
-  /// After Firebase phone auth, sync user via the backend so cart/orders work.
-  Future<void> _syncWithSupabase(UserCredential userCred) async {
-    final user = userCred.user;
-    if (user == null) return;
-
-    final resolvedPhone = user.phoneNumber ?? '+91$_phoneNumber';
-
-    try {
-      await _api.post('/auth/phone-sync', body: {
-        'uid': user.uid,
-        // Send null when no display name; backend derives a real name
-        // instead of using the literal "Customer" placeholder.
-        'name': user.displayName,
-        'phone': resolvedPhone,
-        'email': user.email,
-      });
-    } catch (e) {
-      debugPrint('Phone-auth backend sync: $e');
-    }
-  }
-
-  /// Get the Firebase user info for the main AuthProvider
-  Map<String, String?> get firebaseUserInfo {
-    final user = _service.currentUser;
-    return {
-      'uid': user?.uid,
-      'phone': user?.phoneNumber,
-      'name': user?.displayName,
-      'email': user?.email,
-    };
+  /// Fetch the current Firebase user's ID token, to be exchanged by the
+  /// backend for a Supabase session. Returns null if no Firebase user is
+  /// signed in.
+  Future<String?> getIdToken({bool forceRefresh = false}) async {
+    return _service.currentUser?.getIdToken(forceRefresh);
   }
 }

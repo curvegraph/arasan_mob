@@ -15,6 +15,7 @@ import '../../features/checkout/screens/order_success_screen.dart';
 import '../../features/auth/screens/user_login_screen.dart';
 import '../../features/auth/screens/phone_login_screen.dart';
 import '../../features/auth/screens/unified_login_screen.dart';
+import '../../features/auth/screens/profile_completion_screen.dart';
 // Register screen removed — phone OTP auto-creates accounts
 import '../../features/account/screens/user_account_screen.dart';
 import '../../features/account/screens/user_profile_screen.dart';
@@ -196,6 +197,11 @@ GoRouter createRouter(AuthProvider authProvider) {
         path: '/shop/phone-login',
         pageBuilder: (context, state) =>
             _slideUpTransition(state, const PhoneLoginScreen()),
+      ),
+      GoRoute(
+        path: '/shop/complete-profile',
+        pageBuilder: (context, state) =>
+            _slideUpTransition(state, const ProfileCompletionScreen()),
       ),
       // User shell
       ShellRoute(
