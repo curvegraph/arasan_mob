@@ -12,6 +12,7 @@ import '../../../data/models/address.dart';
 import '../../../data/models/order.dart';
 import '../../../data/models/cart.dart';
 import '../../../data/models/product.dart';
+import '../../../data/services/auth_api_service.dart';
 import '../../../data/services/secure_api_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
@@ -109,6 +110,27 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
   bool _isShipping = true;
   bool _isSaving = false;
 
+  // ── "Get updates by email" opt-in ──
+  // Null = not chosen yet, true = Yes (email box shown), false = No (skip).
+  bool? _wantsEmailUpdates;
+  final _updatesEmailController = TextEditingController();
+  bool _emailPrefilled = false;
+  // The account's existing real email (e.g. from Google sign-in). It's already
+  // verified, so it needs no OTP. Any *different* email the user types does.
+  String _trustedEmail = '';
+  // Emails proven this session via OTP.
+  final Set<String> _verifiedEmails = {};
+  bool _sendingEmailOtp = false;
+
+  /// The email in the box is "verified" if it's the account's trusted email or
+  /// it was OTP-verified this session.
+  bool get _updatesEmailVerified {
+    final e = _updatesEmailController.text.trim().toLowerCase();
+    if (e.isEmpty) return false;
+    if (_trustedEmail.isNotEmpty && e == _trustedEmail) return true;
+    return _verifiedEmails.contains(e);
+  }
+
   // Use existing saved address
   bool _useSavedAddress = false;
   UserAddress? _selectedSavedAddress;
@@ -178,6 +200,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     _apartmentController.dispose();
     _cityController.dispose();
     _pincodeController.dispose();
+    _updatesEmailController.dispose();
     super.dispose();
   }
 
@@ -211,6 +234,20 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     final authProvider = context.read<AuthProvider>();
     final profileProvider = context.read<UserProfileProvider>();
     final cart = cartProvider.cart;
+
+    // If the user opted into email updates, the email must be verified first.
+    if (_wantsEmailUpdates == true && !_updatesEmailVerified) {
+      _showCheckoutSnack('Please verify your email to get updates, or choose "No".');
+      return;
+    }
+
+    // Send order emails (confirmation + invoice) ONLY when the user opted into
+    // email updates AND verified the address. If they chose "No" (or left it
+    // unset), pass an empty email so the backend skips the confirmation/invoice
+    // email entirely.
+    final orderEmail = (_wantsEmailUpdates == true && _updatesEmailVerified)
+        ? _updatesEmailController.text.trim()
+        : '';
 
     UserAddress? address;
 
@@ -320,7 +357,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
         final result = await SecureApiService().createOrder(
           items: orderItems,
           customerName: address.fullName,
-          customerEmail: authProvider.userEmail,
+          customerEmail: orderEmail,
           // Prefer the number the user typed in the Contact field; fall back to
           // the saved address's phone when they left it untouched.
           customerPhone: _phoneController.text.trim().length == 10
@@ -375,7 +412,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
             orderItems: orderItems,
             couponCode: cart.appliedCouponCode,
             customerName: address.fullName,
-            customerEmail: authProvider.userEmail ?? '',
+            customerEmail: orderEmail,
             customerPhone: _phoneController.text.trim().length == 10
                 ? '+91 ${_phoneController.text.trim()}'
                 : address.phone,
@@ -530,7 +567,15 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
               flex: 3,
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                child: _buildFormSectionCompact(checkoutProvider),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: _buildFormSectionCompact(checkoutProvider),
+                ),
               ),
             ),
             // Right: Order Summary
@@ -567,8 +612,16 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           // Order Summary (Products) at top on mobile
           _buildOrderSummary(cart, checkoutProvider),
           const SizedBox(height: 20),
-          // Form
-          _buildFormSection(checkoutProvider),
+          // Form — all sections (contact, address, updates, payment) in one box.
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: _buildFormSection(checkoutProvider),
+          ),
           const SizedBox(height: 24),
           // Place order button
           _buildPlaceOrderButton(checkoutProvider),
@@ -758,6 +811,10 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
             ),
           ],
 
+          const SizedBox(height: 16),
+
+          // ── Get updates by email ──
+          _buildEmailUpdatesSection(),
           const SizedBox(height: 16),
 
           // ── Payment Method Section ──
@@ -978,6 +1035,10 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
           ],
 
           const SizedBox(height: 28),
+
+          // ── Get updates by email ──
+          _buildEmailUpdatesSection(),
+          const SizedBox(height: 16),
 
           // ── Payment Method Section ──
           const Text(
@@ -1759,6 +1820,323 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     );
   }
 
+  /// The account's existing real email (empty for phone-only/synthetic). This
+  /// is already verified (e.g. from Google sign-in) so it needs no OTP.
+  String _realProfileEmail() {
+    final raw = context.read<UserProfileProvider>().profile.email.trim();
+    if (raw.isEmpty) return '';
+    if (raw.toLowerCase().endsWith('@phone.arasanmobiles.invalid')) return '';
+    return raw;
+  }
+
+  /// Centered "Get updates by email" opt-in shown between the delivery address
+  /// and payment sections. Yes reveals an email box that must be verified
+  /// (existing account email is trusted; any changed email needs an OTP).
+  Widget _buildEmailUpdatesSection() {
+    _trustedEmail = _realProfileEmail().toLowerCase();
+    final wants = _wantsEmailUpdates == true;
+    final verified = _updatesEmailVerified;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Heading on the left (like "Delivery Address") + Yes/No on the right.
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Get updates by email',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            _buildYesNoChip(
+              label: 'Yes',
+              selected: _wantsEmailUpdates == true,
+              onTap: () {
+                setState(() {
+                  _wantsEmailUpdates = true;
+                  // Prefill the account's email once (e.g. the Google address).
+                  if (!_emailPrefilled &&
+                      _updatesEmailController.text.trim().isEmpty) {
+                    final real = _realProfileEmail();
+                    if (real.isNotEmpty) _updatesEmailController.text = real;
+                    _emailPrefilled = true;
+                  }
+                });
+              },
+            ),
+            const SizedBox(width: 8),
+            _buildYesNoChip(
+              label: 'No',
+              selected: _wantsEmailUpdates == false,
+              onTap: () => setState(() => _wantsEmailUpdates = false),
+            ),
+          ],
+        ),
+        if (wants) ...[
+          const SizedBox(height: 10),
+          // Email box with a compact "Verify" / "Verified" marker inside, right.
+          TextFormField(
+            controller: _updatesEmailController,
+            keyboardType: TextInputType.emailAddress,
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Enter your email',
+              hintStyle: const TextStyle(fontSize: 14, color: AppColors.textHint),
+              filled: true,
+              fillColor: AppColors.surface,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide:
+                    const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 0, minHeight: 0),
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(left: 8, right: 12),
+                child: verified
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.check_circle,
+                              size: 16, color: AppColors.success),
+                          SizedBox(width: 4),
+                          Text(
+                            'Verified',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.success,
+                            ),
+                          ),
+                        ],
+                      )
+                    : _sendingEmailOtp
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : GestureDetector(
+                            onTap: _verifyUpdatesEmail,
+                            child: const Text(
+                              'Verify',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildYesNoChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.surface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : AppColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCheckoutSnack(String message, {bool error = true}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? AppColors.error : AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  /// Sends an OTP to the typed email then opens the code-entry dialog. Requires
+  /// login (the backend scopes the code to the authenticated user).
+  Future<void> _verifyUpdatesEmail() async {
+    final email = _updatesEmailController.text.trim();
+    final emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailRe.hasMatch(email)) {
+      _showCheckoutSnack('Please enter a valid email address');
+      return;
+    }
+
+    final auth = context.read<AuthProvider>();
+    if (!auth.isLoggedIn || auth.authToken == null) {
+      final ok = await LoginDialog.showWithMessage(
+        context,
+        'Please login to verify your email',
+      );
+      if (!ok || !mounted) return;
+    }
+
+    setState(() => _sendingEmailOtp = true);
+    try {
+      await AuthApiService().sendEmailOtp(email);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sendingEmailOtp = false);
+        _showCheckoutSnack(e.toString());
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _sendingEmailOtp = false);
+    await _showOtpDialog(email);
+  }
+
+  /// Modal to enter the 6-digit code and verify it. On success the email is
+  /// recorded as verified (and saved to the account by the backend).
+  Future<void> _showOtpDialog(String email) async {
+    final codeController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        bool verifying = false;
+        String? errorText;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text('Verify your email'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter the 6-digit code sent to $email',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: codeController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    autofocus: true,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 6,
+                    ),
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      hintText: '••••••',
+                      errorText: errorText,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: verifying ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: verifying
+                      ? null
+                      : () async {
+                          final code = codeController.text.trim();
+                          if (code.length != 6) {
+                            setDialogState(() => errorText = 'Enter the 6-digit code');
+                            return;
+                          }
+                          setDialogState(() {
+                            verifying = true;
+                            errorText = null;
+                          });
+                          try {
+                            await AuthApiService()
+                                .verifyEmailOtp(email: email, code: code);
+                            if (!mounted) return;
+                            _verifiedEmails.add(email.toLowerCase());
+                            // Refresh the profile so the saved email is reflected.
+                            context.read<UserProfileProvider>().loadProfile();
+                            Navigator.pop(dialogContext);
+                            setState(() {});
+                            _showCheckoutSnack('Email verified', error: false);
+                          } catch (e) {
+                            setDialogState(() {
+                              verifying = false;
+                              errorText = e.toString();
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: verifying
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text('Verify'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    codeController.dispose();
+  }
+
   Widget _buildPlaceOrderButton(CheckoutProvider checkoutProvider) {
     return SizedBox(
       width: double.infinity,
@@ -1802,12 +2180,14 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     String? prefix,
     IconData? suffixIcon,
     String? Function(String?)? validator,
+    void Function(String)? onChanged,
     bool enabled = true,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
+      onChanged: onChanged,
       maxLength: maxLength,
       enabled: enabled,
       style: TextStyle(

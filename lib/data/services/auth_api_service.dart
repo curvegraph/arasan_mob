@@ -106,6 +106,24 @@ class AuthApiService {
     return UserResponse.fromJson(response);
   }
 
+  /// Send a 6-digit verification code to [email] for the logged-in user.
+  /// Used to add/confirm a real email (e.g. for order updates at checkout).
+  Future<void> sendEmailOtp(String email) async {
+    await _api.post('/auth/email/send-otp',
+        body: {'email': email}, requireAuth: true);
+  }
+
+  /// Verify [email] with the [code] sent by [sendEmailOtp]. On success the
+  /// backend saves the email onto the account. Throws on an invalid/expired
+  /// code.
+  Future<void> verifyEmailOtp({
+    required String email,
+    required String code,
+  }) async {
+    await _api.post('/auth/email/verify-otp',
+        body: {'email': email, 'code': code}, requireAuth: true);
+  }
+
   /// Change password
   Future<MessageResponse> changePassword({
     required String currentPassword,

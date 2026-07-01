@@ -45,6 +45,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   int _selectedImageIndex = 0;
   ProductVariant? _selectedVariant;
   String? _selectedColor;
+  // Which dimension the shopper touched LAST ('color' or 'variant'). Drives the
+  // cross-highlight: pick a colour -> its variants brighten; pick a variant ->
+  // its colours brighten. Only one direction fades at a time.
+  String _lastPicked = 'color';
   bool _variantInitialized = false;
   bool _detailLoading = true;
   List<Product> _related = const [];
@@ -901,25 +905,51 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       final k = _colorKey(v);
       if (seenColours.add(k.toLowerCase())) colours.add(k);
     }
-    final selectedColour = _selectedColor ??
-        (_selectedVariant != null
-            ? _colorKey(_selectedVariant!)
-            : _colorKey(variants.first));
-    final colourVariants = variants
-        .where((v) =>
-            _colorKey(v).toLowerCase() == selectedColour.toLowerCase())
-        .toList();
-    // Equal-width storage boxes — two per row.
-    // Fixed width so the variant options sit in a single horizontal line and
-    // scroll sideways (the next one peeks), instead of wrapping to rows.
-    const boxW = 172.0;
+    // Distinct RAM+storage options, deduped by label so the SAME storage/RAM
+    // shows only ONCE even when several colours offer it.
+    final variantLabels = <String>[];
+    final seenLabels = <String>{};
+    for (final v in variants) {
+      final l = v.label.trim();
+      if (l.isEmpty) continue;
+      if (seenLabels.add(l.toLowerCase())) variantLabels.add(l);
+    }
+
+    // Helpers over the (colour, label) grid of real combinations.
+    bool comboExists(String colour, String label) => variants.any((v) =>
+        _colorKey(v).toLowerCase() == colour.toLowerCase() &&
+        v.label.toLowerCase() == label.toLowerCase());
+    ProductVariant? comboVariant(String colour, String label) {
+      for (final v in variants) {
+        if (_colorKey(v).toLowerCase() == colour.toLowerCase() &&
+            v.label.toLowerCase() == label.toLowerCase()) return v;
+      }
+      return null;
+    }
+    ProductVariant repForColour(String colour) => variants.firstWhere(
+        (v) => _colorKey(v).toLowerCase() == colour.toLowerCase(),
+        orElse: () => variants.first);
+    ProductVariant repForLabel(String label) => variants.firstWhere(
+        (v) => v.label.toLowerCase() == label.toLowerCase(),
+        orElse: () => variants.first);
+
+    // The active combination — colour + RAM/storage both follow the currently
+    // selected variant (single source of truth). Seed from the first option
+    // before any pick.
+    final selectedColour = _selectedVariant != null
+        ? _colorKey(_selectedVariant!)
+        : (_selectedColor ?? _colorKey(variants.first));
+    final selectedLabel = _selectedVariant?.label ??
+        (variantLabels.isNotEmpty ? variantLabels.first : '');
+    // The dimension touched last decides which side cross-highlights.
+    final byVariant = _lastPicked == 'variant';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ---- COLOUR ----
         if (colours.length > 1) ...[
-          _variantHeading('Selected Color: ', selectedColour),
+          _variantHeading('Colour: ', selectedColour),
           const SizedBox(height: 10),
           // Single horizontal line — scroll sideways to reach the rest; the
           // last swatch peeks to hint there's more (never wraps to a 2nd row).
@@ -933,61 +963,72 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                     rep.imageUrl.isNotEmpty ? rep.imageUrl : product.imageUrl;
                 final selected =
                     col.toLowerCase() == selectedColour.toLowerCase();
+                // In variant-mode, dim colours that don't offer the selected
+                // RAM/storage (still tappable); in colour-mode all stay bright.
+                final brightCol =
+                    !byVariant || selected || comboExists(col, selectedLabel);
                 return Padding(
                   padding: const EdgeInsets.only(right: 10),
-                  child: GestureDetector(
-                    onTap: () => setState(() {
-                      _selectedColor = col;
-                      _selectedVariant = rep;
-                      _selectedImageIndex = 0;
-                    }),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: selected
-                                  ? const Color(0xFF1400E0)
-                                  : const Color(0xFFE2E8F0),
-                              width: selected ? 2 : 1,
+                  child: Opacity(
+                    opacity: brightCol ? 1.0 : 0.4,
+                    child: GestureDetector(
+                      onTap: () => setState(() {
+                        // Colour -> keep the current RAM/storage if this colour
+                        // offers it, else fall back to the colour's first.
+                        _lastPicked = 'color';
+                        _selectedColor = col;
+                        _selectedVariant =
+                            comboVariant(col, selectedLabel) ?? repForColour(col);
+                        _selectedImageIndex = 0;
+                      }),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: selected
+                                    ? const Color(0xFF1400E0)
+                                    : const Color(0xFFE2E8F0),
+                                width: selected ? 2 : 1,
+                              ),
+                            ),
+                            clipBehavior: Clip.hardEdge,
+                            padding: const EdgeInsets.all(4),
+                            child: swatchImage.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: swatchImage,
+                                    fit: BoxFit.contain,
+                                    errorWidget: (_, __, ___) => const Icon(
+                                        Icons.phone_android,
+                                        color: AppColors.textHint),
+                                  )
+                                : const Icon(Icons.phone_android,
+                                    color: AppColors.textHint),
+                          ),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: 56,
+                            child: Text(
+                              col,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: selected
+                                    ? const Color(0xFF1400E0)
+                                    : const Color(0xFF64748B),
+                              ),
                             ),
                           ),
-                          clipBehavior: Clip.hardEdge,
-                          padding: const EdgeInsets.all(4),
-                          child: swatchImage.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: swatchImage,
-                                  fit: BoxFit.contain,
-                                  errorWidget: (_, __, ___) => const Icon(
-                                      Icons.phone_android,
-                                      color: AppColors.textHint),
-                                )
-                              : const Icon(Icons.phone_android,
-                                  color: AppColors.textHint),
-                        ),
-                        const SizedBox(height: 4),
-                        SizedBox(
-                          width: 56,
-                          child: Text(
-                            col,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: selected
-                                  ? const Color(0xFF1400E0)
-                                  : const Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -996,97 +1037,84 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
           ),
           const SizedBox(height: 16),
         ],
-        // ---- STORAGE / RAM (for the selected colour) ----
-        _variantHeading('Variant: ', _selectedVariant?.label ?? ''),
+        // ---- VARIANTS (RAM/storage, deduped, all in one place) ----
+        // Compact chips: label + stock only (price lives in the box below).
+        // Pick a colour -> its variants are BRIGHT, the rest FADE (still
+        // tappable). Pick a variant -> only it stays bright, its SIBLINGS fade,
+        // and the colours offering it brighten.
+        _variantHeading('Variant: ', selectedLabel),
         const SizedBox(height: 10),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: colourVariants.map((v) {
-              final selected = _selectedVariant?.id == v.id;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-              onTap: () => setState(() {
-                _selectedVariant = v;
-                _selectedImageIndex = 0;
-              }),
-              child: Container(
-                width: boxW,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: variantLabels.map((label) {
+            final selected = label.toLowerCase() == selectedLabel.toLowerCase();
+            // Which colour's row this chip describes: the selected colour if it
+            // offers this label, otherwise this label's own first colour.
+            final ctx = comboVariant(selectedColour, label) ?? repForLabel(label);
+            final inSelColour = comboExists(selectedColour, label);
+            // Bright = this RAM/storage is offered by the SELECTED colour. True
+            // in BOTH modes, so a same-colour SIBLING stays bright when you pick
+            // one variant to check its price — only OTHER-colour variants fade.
+            // The clicked variant additionally carries the border (see below).
+            final bright = inSelColour;
+            final chip = Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+              decoration: BoxDecoration(
+                color: selected
+                    ? const Color(0xFF1400E0).withValues(alpha: 0.06)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
                   color: selected
-                      ? const Color(0xFF1400E0).withValues(alpha: 0.06)
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected
-                        ? const Color(0xFF1400E0)
-                        : const Color(0xFFE2E8F0),
-                    width: selected ? 2 : 1,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      v.label,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    if (v.discountPercent > 0)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '↓${v.discountPercent.toInt()}%',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF16A34A),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            CurrencyFormatter.format(v.price),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF94A3B8),
-                              decoration: TextDecoration.lineThrough,
-                            ),
-                          ),
-                        ],
-                      ),
-                    Text(
-                      CurrencyFormatter.format(v.effectivePrice),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF1A1A1A),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      v.isOutOfStock ? 'Out of stock' : 'In stock',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: v.isOutOfStock
-                            ? const Color(0xFFEF4444)
-                            : const Color(0xFF16A34A),
-                      ),
-                    ),
-                  ],
+                      ? const Color(0xFF1400E0)
+                      : const Color(0xFFE2E8F0),
+                  width: selected ? 2 : 1,
                 ),
               ),
-            ));
-            }).toList(),
-          ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1A1A1A),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    ctx.isOutOfStock ? 'Out of stock' : 'In stock',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: ctx.isOutOfStock
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFF16A34A),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            return GestureDetector(
+              onTap: () => setState(() {
+                // Variant -> keep the current colour if it offers this label,
+                // else jump to the first colour that does. Snapping the colour
+                // to the variant prevents a stale "ghost" selection.
+                _lastPicked = 'variant';
+                final next = comboVariant(selectedColour, label) ??
+                    repForLabel(label);
+                _selectedVariant = next;
+                _selectedColor = _colorKey(next);
+                _selectedImageIndex = 0;
+              }),
+              // Faded (still tappable) when not part of the active selection.
+              child: Opacity(opacity: bright ? 1.0 : 0.4, child: chip),
+            );
+          }).toList(),
         ),
       ],
     );

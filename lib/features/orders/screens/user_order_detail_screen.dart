@@ -144,20 +144,38 @@ class UserOrderDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FadeSlideIn(index: 0, child: _buildOrderInfoHeader(order)),
-            const SizedBox(height: AppSpacing.md),
-            FadeSlideIn(index: 1, child: _buildTrackingTimeline(order)),
-            const SizedBox(height: AppSpacing.md),
-            FadeSlideIn(index: 2, child: _buildItemsList(context, order)),
-            const SizedBox(height: AppSpacing.md),
-            FadeSlideIn(index: 3, child: _buildShippingAddress(order)),
-            const SizedBox(height: AppSpacing.md),
-            FadeSlideIn(index: 4, child: _buildPaymentInfo(order)),
-            const SizedBox(height: AppSpacing.md),
-            FadeSlideIn(index: 5, child: _buildPriceBreakdown(order)),
+            // All order info in a single card, sections split by dividers.
+            FadeSlideIn(
+              index: 0,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(
+                  AppSpacing.userPagePadding,
+                  AppSpacing.md,
+                  AppSpacing.userPagePadding,
+                  0,
+                ),
+                decoration: PremiumDecorations.glassCard(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildOrderInfoHeader(order),
+                    _sectionDivider(),
+                    _buildTrackingTimeline(order),
+                    _sectionDivider(),
+                    _buildItemsList(context, order),
+                    _sectionDivider(),
+                    _buildShippingAddress(order),
+                    _sectionDivider(),
+                    _buildPaymentInfo(order),
+                    _sectionDivider(),
+                    _buildPriceBreakdown(order),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: AppSpacing.md),
             FadeSlideIn(
-              index: 6,
+              index: 1,
               child: _buildActionButtons(context, order,
                   context.read<UserOrderProvider>()),
             ),
@@ -168,18 +186,19 @@ class UserOrderDetailScreen extends StatelessWidget {
     );
   }
 
+  Widget _sectionDivider() => const Divider(
+        height: 1,
+        thickness: 1,
+        color: AppColors.divider,
+        indent: AppSpacing.md,
+        endIndent: AppSpacing.md,
+      );
+
   Widget _buildOrderInfoHeader(Order order) {
     final statusColor = _statusColor(order.status);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(
-        AppSpacing.userPagePadding,
-        AppSpacing.md,
-        AppSpacing.userPagePadding,
-        0,
-      ),
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: PremiumDecorations.glassCard(),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -289,10 +308,7 @@ class UserOrderDetailScreen extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.userPagePadding),
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: PremiumDecorations.glassCard(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -447,10 +463,7 @@ class UserOrderDetailScreen extends StatelessWidget {
 
   Widget _buildItemsList(BuildContext context, Order order) {
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.userPagePadding),
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: PremiumDecorations.glassCard(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -564,10 +577,7 @@ class UserOrderDetailScreen extends StatelessWidget {
 
   Widget _buildShippingAddress(Order order) {
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.userPagePadding),
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: PremiumDecorations.glassCard(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -625,10 +635,7 @@ class UserOrderDetailScreen extends StatelessWidget {
 
   Widget _buildPaymentInfo(Order order) {
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.userPagePadding),
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: PremiumDecorations.glassCard(),
       child: Row(
         children: [
           Container(
@@ -697,10 +704,7 @@ class UserOrderDetailScreen extends StatelessWidget {
 
   Widget _buildPriceBreakdown(Order order) {
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.userPagePadding),
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: PremiumDecorations.glassCard(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

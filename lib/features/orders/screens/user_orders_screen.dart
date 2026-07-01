@@ -5,6 +5,8 @@ import 'package:shimmer/shimmer.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_spacing.dart';
 import '../../../core/utils/app_animations.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../../core/utils/date_formatter.dart';
 import '../../../data/models/order.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/user_order_provider.dart';
@@ -331,7 +333,7 @@ class _OrdersList extends StatelessWidget {
         itemBuilder: (context, index) {
           return FadeSlideIn(
             index: index,
-            child: _OrderCard(order: orders[index]),
+            child: OrderCard(order: orders[index]),
           );
         },
       ),
@@ -509,10 +511,10 @@ class _OrdersList extends StatelessWidget {
   }
 }
 
-class _OrderCard extends StatelessWidget {
+class OrderCard extends StatelessWidget {
   final Order order;
 
-  const _OrderCard({required this.order});
+  const OrderCard({super.key, required this.order});
 
   Color _statusColor(OrderStatus status) {
     switch (status) {
@@ -533,88 +535,242 @@ class _OrderCard extends StatelessWidget {
     }
   }
 
+  String _paymentLabel(String method) {
+    switch (method.toLowerCase()) {
+      case 'cod':
+        return 'COD';
+      case 'online':
+      case 'razorpay':
+        return 'Online';
+      case 'upi':
+        return 'UPI';
+      case 'card':
+        return 'Card';
+      default:
+        return method.toUpperCase();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final firstItem = order.items.isNotEmpty ? order.items.first : null;
     final statusColor = _statusColor(order.status);
-    final qty = firstItem?.quantity ?? 1;
+    final isDelivered = order.status == OrderStatus.delivered;
+    final canTrack = order.status == OrderStatus.shipped ||
+        order.status == OrderStatus.outForDelivery;
+    final detailRoute = '/shop/account/orders/${order.id}';
 
-    // Clean, product-focused card — product image + name + qty + status only.
-    // No order id, no timeline, no grey footer, no "View Details" button; the
-    // whole card taps through to the order detail page.
-    return GestureDetector(
-      onTap: () => context.push('/shop/account/orders/${order.id}'),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: AppSpacing.md),
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: ImagePlaceholder(
-                imageUrl: firstItem?.imageUrl ?? '',
-                width: 92,
-                height: 92,
-                icon: Icons.phone_android,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
+    // Rich product card: status + payment + order # + image + name (variant is
+    // baked into the product name by the backend) + date + item count, then a
+    // footer with the total and a context action (Track / Rate & Review / View).
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => context.push(detailRoute),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    firstItem?.productName ?? 'Product',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      height: 1.25,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: ImagePlaceholder(
+                      imageUrl: firstItem?.imageUrl ?? '',
+                      width: 76,
+                      height: 76,
+                      icon: Icons.phone_android,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    order.items.length > 1
-                        ? 'Qty: $qty  ·  +${order.items.length - 1} more'
-                        : 'Qty: $qty',
-                    style: const TextStyle(
-                        fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      order.statusLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: statusColor,
-                      ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Status + payment + order number
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                order.statusLabel.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: statusColor,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _paymentLabel(order.paymentMethod),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF64748B),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '#${order.orderNumber}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textHint,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          firstItem?.productName ?? 'Product',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                            height: 1.25,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_today_outlined,
+                                size: 13, color: AppColors.textHint),
+                            const SizedBox(width: 4),
+                            Text(
+                              DateFormatter.format(order.createdAt),
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(width: 12),
+                            const Icon(Icons.shopping_bag_outlined,
+                                size: 13, color: AppColors.textHint),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${order.items.length} item${order.items.length > 1 ? 's' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.chevron_right,
-                  color: AppColors.textHint, size: 22),
+          ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          // Footer: total + context action
+          Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: 10),
+            child: Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TOTAL',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textHint,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      CurrencyFormatter.format(order.totalAmount),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                if (isDelivered)
+                  _footerAction(
+                    icon: Icons.star_outline,
+                    label: 'Rate & Review',
+                    onTap: () {
+                      if (order.items.length == 1 && firstItem != null) {
+                        context.push(
+                            '/shop/product/${firstItem.productId}/write-review');
+                      } else {
+                        context.push(detailRoute);
+                      }
+                    },
+                  )
+                else if (canTrack)
+                  _footerAction(
+                    icon: Icons.local_shipping_outlined,
+                    label: 'Track',
+                    // Open the order details page (which shows the tracking
+                    // timeline) rather than the Shiprocket tracking screen,
+                    // which errors when live tracking isn't available.
+                    onTap: () => context.push(detailRoute),
+                  )
+                else
+                  _footerAction(
+                    icon: Icons.chevron_right,
+                    label: 'View',
+                    onTap: () => context.push(detailRoute),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _footerAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }

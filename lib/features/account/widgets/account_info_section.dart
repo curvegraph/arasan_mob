@@ -13,49 +13,54 @@ class AccountInfoSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionHeader('Customer Service'),
-        _LinkTile(
+        // Help Center — expands inline to show two simple actions.
+        const _ExpandableTile(
           icon: Icons.support_agent_outlined,
           label: 'Help Center',
-          route: '/shop/help',
-        ),
-        _LinkTile(
-          icon: Icons.help_outline,
-          label: 'FAQs',
-          route: '/shop/help/faq',
+          children: [
+            _BoxActionRow(
+              icon: Icons.phone_outlined,
+              label: 'Call us',
+              url: 'tel:+919944404603',
+            ),
+            _BoxDivider(),
+            _BoxActionRow(
+              icon: Icons.mail_outline,
+              label: 'Email us',
+              url: 'mailto:arasanmobile2012@gmail.com',
+            ),
+          ],
         ),
         _LinkTile(
           icon: Icons.local_shipping_outlined,
           label: 'Track Order',
           route: '/shop/account/orders',
         ),
-        _LinkTile(
-          icon: Icons.local_offer_outlined,
-          label: "Today's Offers",
-          route: '/shop/offers',
-        ),
-        _LinkTile(
+        // About Us — expands inline to show the contact details.
+        const _ExpandableTile(
           icon: Icons.info_outline,
           label: 'About Us',
-          route: '/shop/store-info',
-        ),
-        const SizedBox(height: 16),
-        const _SectionHeader('Contact Us'),
-        _ContactTile(
-          icon: Icons.phone_outlined,
-          text: '+91 99444 04603',
-          url: 'tel:+919944404603',
-        ),
-        _ContactTile(
-          icon: Icons.mail_outline,
-          text: 'arasanmobile2012@gmail.com',
-          url: 'mailto:arasanmobile2012@gmail.com',
-        ),
-        _ContactTile(
-          icon: Icons.location_on_outlined,
-          text:
-              'ASR Complex, Near Periyar Silai,\nOld Bus Stand, Perambalur — 621212,\nTamil Nadu',
-          url:
-              'https://maps.google.com/?q=ASR+Complex+Near+Periyar+Silai+Old+Bus+Stand+Perambalur',
+          children: [
+            _BoxActionRow(
+              icon: Icons.phone_outlined,
+              label: '+91 99444 04603',
+              url: 'tel:+919944404603',
+            ),
+            _BoxDivider(),
+            _BoxActionRow(
+              icon: Icons.mail_outline,
+              label: 'arasanmobile2012@gmail.com',
+              url: 'mailto:arasanmobile2012@gmail.com',
+            ),
+            _BoxDivider(),
+            _BoxActionRow(
+              icon: Icons.location_on_outlined,
+              label:
+                  'ASR Complex, Near Periyar Silai,\nOld Bus Stand, Perambalur — 621212,\nTamil Nadu',
+              url:
+                  'https://maps.google.com/?q=ASR+Complex+Near+Periyar+Silai+Old+Bus+Stand+Perambalur',
+            ),
+          ],
         ),
         const SizedBox(height: 28),
         Padding(
@@ -155,32 +160,114 @@ class _LinkTile extends StatelessWidget {
   }
 }
 
-class _ContactTile extends StatelessWidget {
+/// A tile that toggles a simple bordered box open/closed inline (no navigation).
+class _ExpandableTile extends StatefulWidget {
   final IconData icon;
-  final String text;
+  final String label;
+  final List<Widget> children;
+
+  const _ExpandableTile({
+    required this.icon,
+    required this.label,
+    required this.children,
+  });
+
+  @override
+  State<_ExpandableTile> createState() => _ExpandableTileState();
+}
+
+class _ExpandableTileState extends State<_ExpandableTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          leading: Icon(widget.icon, size: 22, color: AppColors.primary),
+          title: Text(
+            widget.label,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          trailing: Icon(
+            _expanded ? Icons.expand_less : Icons.expand_more,
+            size: 20,
+            color: AppColors.textTertiary,
+          ),
+          onTap: () => setState(() => _expanded = !_expanded),
+          dense: true,
+          visualDensity: const VisualDensity(vertical: -1),
+        ),
+        if (_expanded)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: widget.children,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A plain, colourless tappable row inside an expandable box.
+class _BoxActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
   final String url;
 
-  const _ContactTile({
+  const _BoxActionRow({
     required this.icon,
-    required this.text,
+    required this.label,
     required this.url,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, size: 22, color: AppColors.primary),
-      title: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 14,
-          color: AppColors.textPrimary,
-          height: 1.4,
+    return InkWell(
+      onTap: () => launcher.launchUrl(Uri.parse(url)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20, color: AppColors.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textPrimary,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-      onTap: () => launcher.launchUrl(Uri.parse(url)),
-      dense: true,
-      visualDensity: const VisualDensity(vertical: -1),
     );
+  }
+}
+
+class _BoxDivider extends StatelessWidget {
+  const _BoxDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, thickness: 1, color: AppColors.border);
   }
 }

@@ -10,14 +10,15 @@ import '../../../data/models/user_profile.dart';
 import '../../../data/models/order.dart';
 import '../../../data/models/product.dart';
 import '../../../providers/auth_provider.dart';
-import '../../../providers/cart_provider.dart';
 import '../../../providers/product_provider.dart';
 import '../../../providers/review_provider.dart';
 import '../../../providers/user_order_provider.dart';
 import '../../../providers/user_profile_provider.dart';
 import '../../../providers/wishlist_provider.dart';
 import '../../../shared/widgets/image_placeholder.dart';
+import '../../../shared/widgets/product_card_mini.dart';
 import '../../../shared/widgets/rating_stars.dart';
+import '../../orders/screens/user_orders_screen.dart';
 import '../widgets/account_info_section.dart';
 
 class UserAccountScreen extends StatefulWidget {
@@ -64,7 +65,7 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
                 _buildBreadcrumb(),
                 const SizedBox(height: 8),
                 const Text(
-                  'My Account',
+                  'Account',
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
@@ -105,7 +106,7 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
             padding: EdgeInsets.fromLTRB(
                 20, MediaQuery.paddingOf(context).top + 16, 20, 0),
             child: const Text(
-              'My account',
+              'Account',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,
@@ -118,7 +119,7 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
           _buildMobileTabBar(),
           const SizedBox(height: 16),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
             child: _buildSelectedPanel(auth),
           ),
           const SizedBox(height: 24),
@@ -164,11 +165,11 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
   }
 
   List<_SidebarItem> get _menuItems => [
-        _SidebarItem(icon: Icons.person_outline, title: 'My details'),
-        _SidebarItem(icon: Icons.favorite_border, title: 'My wishlist'),
-        _SidebarItem(icon: Icons.receipt_long_outlined, title: 'My orders'),
-        _SidebarItem(icon: Icons.location_on_outlined, title: 'My addresses'),
-        _SidebarItem(icon: Icons.rate_review_outlined, title: 'My reviews'),
+        _SidebarItem(icon: Icons.person_outline, title: 'Profile'),
+        _SidebarItem(icon: Icons.favorite_border, title: 'Wishlist'),
+        _SidebarItem(icon: Icons.receipt_long_outlined, title: 'Orders'),
+        _SidebarItem(icon: Icons.location_on_outlined, title: 'Addresses'),
+        _SidebarItem(icon: Icons.rate_review_outlined, title: 'Reviews'),
       ];
 
   Widget _buildSidebarMenu() {
@@ -177,15 +178,7 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
         final item = _menuItems[index];
         final isSelected = _selectedIndex == index;
         return GestureDetector(
-          onTap: () {
-            if (index == 1) {
-              context.push('/shop/wishlist');
-            } else if (index == 2) {
-              context.push('/shop/account/orders');
-            } else {
-              setState(() => _selectedIndex = index);
-            }
-          },
+          onTap: () => setState(() => _selectedIndex = index),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             width: double.infinity,
@@ -239,18 +232,10 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
             child: ChoiceChip(
               label: Text(item.title),
               selected: isSelected,
-              // Wishlist + Orders open the standalone screens (the ones with the
-              // product-grid wishlist and the search/Filters order list) so the
-              // account tabs don't show a separate, stale inline copy.
-              onSelected: (_) {
-                if (index == 1) {
-                  context.push('/shop/wishlist');
-                } else if (index == 2) {
-                  context.push('/shop/account/orders');
-                } else {
-                  setState(() => _selectedIndex = index);
-                }
-              },
+              // Wishlist and Orders render inline in the account page
+              // (the _WishlistPanel / _OrdersPanel below) instead of pushing a
+              // separate screen.
+              onSelected: (_) => setState(() => _selectedIndex = index),
               selectedColor: const Color(0xFF1400E0).withValues(alpha: 0.10),
               backgroundColor: Colors.white,
               labelStyle: TextStyle(
@@ -377,7 +362,7 @@ class _UserAccountScreenState extends State<UserAccountScreen> {
     final auth = context.read<AuthProvider>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Account'),
+        title: const Text('Account'),
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
@@ -693,7 +678,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
@@ -710,7 +695,7 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
               children: [
                 const Expanded(
                   child: Text(
-                    'My details',
+                    'Profile',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
@@ -771,7 +756,8 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
                           displayEmail,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF475569),
                           ),
                         ),
                     ],
@@ -1069,8 +1055,9 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF475569),
               ),
             ),
           ),
@@ -1079,8 +1066,8 @@ class _MyDetailsPanelState extends State<_MyDetailsPanel> {
               displayValue,
               style: TextStyle(
                 fontSize: 15,
-                fontWeight: isEmpty ? FontWeight.w400 : FontWeight.w500,
-                color: isEmpty ? AppColors.textTertiary : AppColors.textPrimary,
+                fontWeight: isEmpty ? FontWeight.w500 : FontWeight.w700,
+                color: isEmpty ? AppColors.textTertiary : const Color(0xFF0F172A),
               ),
             ),
           ),
@@ -1096,7 +1083,8 @@ class _SidebarItem {
   _SidebarItem({required this.icon, required this.title});
 }
 
-// ─── Wishlist Panel (inline) ───
+
+// ─── Wishlist Panel (product grid) ───
 class _WishlistPanel extends StatelessWidget {
   const _WishlistPanel();
 
@@ -1117,10 +1105,9 @@ class _WishlistPanel extends StatelessWidget {
     }
 
     final productProvider = context.watch<ProductProvider>();
-    final cartProvider = context.read<CartProvider>();
 
-    // If any wishlist row references a product we haven't loaded yet, kick
-    // off a background fetch. The widget rebuilds when the cache fills in.
+    // Kick off a background fetch for any wishlist row whose product isn't
+    // cached yet; the grid rebuilds as products arrive.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final item in items) {
         if (productProvider.getProductById(item.productId) == null) {
@@ -1129,345 +1116,49 @@ class _WishlistPanel extends StatelessWidget {
       }
     });
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'My Wishlist (${items.length})',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-              ),
-              TextButton.icon(
-                onPressed: () => context.go('/shop'),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Browse More', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // List-based layout for better product display
-          ...items.map((wishlistItem) {
-            final product = productProvider.getProductById(wishlistItem.productId);
+    final products = items
+        .map((it) => productProvider.getProductById(it.productId))
+        .whereType<Product>()
+        .toList();
 
-            if (product == null) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 70,
-                      height: 70,
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceVariant,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.error_outline, size: 28, color: AppColors.textHint),
-                    ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Text('Product unavailable', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-                    ),
-                    IconButton(
-                      onPressed: () => wishlistProvider.removeFromWishlist(wishlistItem.productId),
-                      icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.textHint),
-                    ),
-                  ],
-                ),
-              );
-            }
+    final width = MediaQuery.sizeOf(context).width;
+    final crossAxisCount = width >= 900 ? 4 : (width >= 600 ? 3 : 2);
 
-            return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border.withValues(alpha: 0.4)),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 8, offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Product image — tap to preview bigger
-                    GestureDetector(
-                      onTap: () => _showWishlistImagePreview(context, product),
-                      child: Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(14),
-                            bottomLeft: Radius.circular(14),
-                          ),
-                          child: ImagePlaceholder(
-                            imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : null,
-                            width: 130,
-                            height: 140,
-                            icon: Icons.phone_android,
-                          ),
-                        ),
-                        if (product.discountPercent > 0)
-                          Positioned(
-                            top: 8,
-                            left: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: AppColors.offerBadge,
-                                borderRadius: BorderRadius.circular(6),
-                                boxShadow: [BoxShadow(color: AppColors.offerBadge.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
-                              ),
-                              child: Text(
-                                '${product.discountPercent.toStringAsFixed(0)}% OFF',
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        if (product.isOutOfStock)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(14),
-                                  bottomLeft: Radius.circular(14),
-                                ),
-                              ),
-                              child: const Center(
-                                child: Text('Out of Stock', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    ),
-                    // Product details — tap to go to detail page
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => context.push('/shop/product/${product.id}'),
-                        child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Brand + Remove button row
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.08),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    product.brand,
-                                    style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                                const Spacer(),
-                                GestureDetector(
-                                  onTap: () => wishlistProvider.removeFromWishlist(product.id),
-                                  child: Container(
-                                    width: 30,
-                                    height: 30,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.error.withValues(alpha: 0.08),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.favorite, size: 16, color: AppColors.error),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            // Product name
-                            Text(
-                              product.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.3),
-                            ),
-                            const SizedBox(height: 10),
-                            // Price row
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  CurrencyFormatter.format(product.effectivePrice),
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.primary),
-                                ),
-                                if (product.offerPrice != null) ...[
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    CurrencyFormatter.format(product.price),
-                                    style: const TextStyle(fontSize: 13, color: AppColors.textHint, decoration: TextDecoration.lineThrough),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            // Add to Cart & Buy Now buttons
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 36,
-                                    child: ElevatedButton.icon(
-                                      onPressed: product.isOutOfStock
-                                          ? null
-                                          : () {
-                                              cartProvider.addToCart(product);
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text('${product.name} added to cart'),
-                                                  backgroundColor: AppColors.success,
-                                                  behavior: SnackBarBehavior.floating,
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                  margin: const EdgeInsets.all(16),
-                                                  duration: const Duration(seconds: 2),
-                                                ),
-                                              );
-                                            },
-                                      icon: const Icon(Icons.shopping_cart_outlined, size: 14),
-                                      label: const Text(
-                                        'Cart',
-                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.addToCartGreen,
-                                        foregroundColor: Colors.white,
-                                        disabledBackgroundColor: AppColors.textHint.withValues(alpha: 0.2),
-                                        disabledForegroundColor: AppColors.textHint,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                        elevation: 0,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: SizedBox(
-                                    height: 36,
-                                    child: ElevatedButton.icon(
-                                      onPressed: product.isOutOfStock
-                                          ? null
-                                          : () {
-                                              cartProvider.addToCart(product);
-                                              context.push('/shop/checkout');
-                                            },
-                                      icon: const Icon(Icons.flash_on, size: 14),
-                                      label: const Text(
-                                        'Buy Now',
-                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.userPrimary,
-                                        foregroundColor: Colors.white,
-                                        disabledBackgroundColor: AppColors.textHint.withValues(alpha: 0.2),
-                                        disabledForegroundColor: AppColors.textHint,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                        elevation: 0,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    ),
-                  ],
-                ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  void _showWishlistImagePreview(BuildContext context, Product product) {
-    final imageUrl = product.imageUrls.isNotEmpty ? product.imageUrls.first : null;
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(24),
-        child: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Stack(
-            alignment: Alignment.topRight,
-            children: [
-              Center(
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 400, maxHeight: 400),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 20,
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: imageUrl != null
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.phone_android,
-                              size: 80,
-                              color: AppColors.textHint,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.phone_android,
-                            size: 80,
-                            color: AppColors.textHint,
-                          ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                right: 0,
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.close, size: 20),
-                  ),
-                ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            'Wishlist (${items.length})',
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
         ),
-      ),
+        if (products.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              childAspectRatio: 0.54,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) =>
+                ProductCardMini(product: products[index]),
+          ),
+      ],
     );
   }
 }
@@ -1505,18 +1196,6 @@ class _OrdersPanelState extends State<_OrdersPanel> {
     }
   }
 
-  IconData _statusIcon(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pending: return Icons.schedule;
-      case OrderStatus.confirmed: return Icons.check_circle;
-      case OrderStatus.shipped: return Icons.local_shipping;
-      case OrderStatus.outForDelivery: return Icons.delivery_dining;
-      case OrderStatus.delivered: return Icons.inventory_2;
-      case OrderStatus.cancelled: return Icons.cancel;
-      case OrderStatus.returned: return Icons.assignment_return;
-    }
-  }
-
   String _formatPaymentMethod(String method) {
     switch (method.toLowerCase()) {
       case 'cod': return 'Cash on Delivery';
@@ -1543,111 +1222,35 @@ class _OrdersPanelState extends State<_OrdersPanel> {
     return _buildOrdersList(context, orderProvider);
   }
 
-  // ─── Orders List View ───
+  // ─── Orders List View — same product-card design as the standalone
+  // My Orders page (UserOrdersScreen). Renders inline in the account page;
+  // tapping a card opens the order detail page. ───
   Widget _buildOrdersList(BuildContext context, UserOrderProvider orderProvider) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'My Orders',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-          ),
-          const SizedBox(height: 16),
-          if (orderProvider.isLoading)
-            const Center(child: Padding(
-              padding: EdgeInsets.all(32),
-              child: CircularProgressIndicator(),
-            ))
-          else if (orderProvider.orders.isEmpty)
-            _buildEmptyPanel(
-              icon: Icons.shopping_bag_outlined,
-              iconColor: AppColors.userPrimary,
-              title: orderProvider.statusFilter != null
-                  ? 'No ${orderProvider.statusFilter!.name} orders'
-                  : 'No Orders Yet',
-              subtitle: 'Start shopping to see your orders here',
-              buttonLabel: 'Browse Products',
-              onTap: () => context.go('/shop'),
-            )
-          else
-            ...orderProvider.orders.map((order) {
-              final statusColor = _statusColor(order.status);
-              return GestureDetector(
-                onTap: () => setState(() => _selectedOrderId = order.id),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(_statusIcon(order.status), size: 20, color: statusColor),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Order #${order.orderNumber}',
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${DateFormatter.format(order.createdAt)} \u2022 ${order.items.length} item${order.items.length > 1 ? 's' : ''}',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            CurrencyFormatter.format(order.totalAmount),
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                          ),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              order.statusLabel,
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.textHint),
-                    ],
-                  ),
-                ),
-              );
-            }),
-        ],
-      ),
+    if (orderProvider.isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (orderProvider.orders.isEmpty) {
+      return _buildEmptyPanel(
+        icon: Icons.shopping_bag_outlined,
+        iconColor: AppColors.userPrimary,
+        title: orderProvider.statusFilter != null
+            ? 'No ${orderProvider.statusFilter!.name} orders'
+            : 'No Orders Yet',
+        subtitle: 'Start shopping to see your orders here',
+        buttonLabel: 'Browse Products',
+        onTap: () => context.go('/shop'),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final order in orderProvider.orders) OrderCard(order: order),
+      ],
     );
   }
 
@@ -2208,7 +1811,7 @@ class _AddressesPanel extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'My Addresses',
+                'Addresses',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
               ),
               SizedBox(
@@ -2675,7 +2278,7 @@ class _MyReviewsPanelState extends State<_MyReviewsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('My Reviews (${items.length})',
+          Text('Reviews (${items.length})',
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

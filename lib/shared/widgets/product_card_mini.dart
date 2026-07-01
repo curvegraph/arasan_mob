@@ -477,8 +477,8 @@ class _ProductCardMiniState extends State<ProductCardMini> {
             child: Text(
               CurrencyFormatter.format(p.price),
               style: const TextStyle(
-                fontSize: 10,
-                color: Color(0xFFCBD5E1),
+                fontSize: 12,
+                color: Color(0xFF64748B),
                 decoration: TextDecoration.lineThrough,
               ),
             ),
