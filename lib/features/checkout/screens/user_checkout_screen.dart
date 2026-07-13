@@ -302,8 +302,12 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
       checkoutProvider.setAddress(address);
     }
 
-    // Require login
-    if (!authProvider.isLoggedIn || authProvider.authToken == null) {
+    // Require login AND a real Supabase session — order creation hits an
+    // authenticated endpoint, which needs the JWT. Cached login state
+    // (isLoggedIn/_userId) can outlive an expired/cleared session, so gate on
+    // hasValidSession too; otherwise the request throws "Authentication
+    // required" client-side and the user only sees a generic failure.
+    if (!authProvider.isLoggedIn || !authProvider.hasValidSession) {
       final loggedIn = await LoginDialog.showWithMessage(
         context,
         'Please login to place your order',
@@ -311,7 +315,7 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
       if (!loggedIn || !mounted) return;
     }
 
-    if (!authProvider.isLoggedIn || authProvider.authToken == null) {
+    if (!authProvider.isLoggedIn || !authProvider.hasValidSession) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

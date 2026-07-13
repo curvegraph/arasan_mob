@@ -115,6 +115,13 @@ class AuthProvider extends ChangeNotifier {
   String? get avatarUrl => _avatarUrl;
   String? get userId => _userId;
   String? get authToken => _userId; // legacy alias — callers want a stable id
+  /// True only when a real Supabase session (JWT) is present — this is what
+  /// backend `requireAuth` calls actually need. [isLoggedIn]/[authToken] can be
+  /// true from cached state after the session has expired or been cleared, so
+  /// flows that hit an authenticated endpoint (e.g. placing an order) must gate
+  /// on THIS, not on [isLoggedIn] alone, or the request throws
+  /// "Authentication required" before it's even sent.
+  bool get hasValidSession => _supabase.auth.currentSession != null;
   bool get isCustomer => _isLoggedIn;
   bool get isDemoMode => _isDemoMode;
 

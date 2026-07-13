@@ -21,6 +21,16 @@ String friendlyOrderError(Object error) {
     return 'Online payment is currently unavailable. Please choose Cash on Delivery.';
   }
 
+  // Session expired / not authenticated — the request is rejected (or never
+  // sent) because there's no valid JWT. Tell the user to log in again rather
+  // than showing the generic "try again".
+  if (raw.contains('Authentication required') ||
+      raw.contains('Authorization token required') ||
+      raw.toLowerCase().contains('unauthorized') ||
+      raw.contains('statusCode: 401')) {
+    return 'Your session has expired. Please log in again to place your order.';
+  }
+
   // Out-of-stock / coupon errors come back as plain text already.
   if (raw.toLowerCase().contains('out of stock')) {
     return 'One or more items in your cart are out of stock.';
