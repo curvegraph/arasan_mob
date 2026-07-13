@@ -304,8 +304,8 @@ class _RecommendedProductCardState extends State<_RecommendedProductCard> {
                           ),
                         ),
 
-                        // Discount badge top-right
-                        if (product.hasDiscount)
+                        // Offer badge top-right — only for a real admin OFFER.
+                        if (product.discountPercent > 0)
                           Positioned(
                             top: 10,
                             right: 10,

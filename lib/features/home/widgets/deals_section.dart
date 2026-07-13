@@ -220,9 +220,9 @@ class _DealsSectionState extends State<DealsSection> {
           SizedBox(height: isWide ? 12 : 8),
           SizedBox(
             // Hug the card: square image + name + price all live inside the box.
-            // Enough for the price + discount chip to wrap to a 2nd line on
-            // narrow cards without overlapping/overflowing the box.
-            height: cardWidth + (isWide ? 74 : 62),
+            // Enough for the sale price + struck original price + discount chip
+            // to wrap to extra lines on narrow cards without overflowing the box.
+            height: cardWidth + (isWide ? 90 : 80),
             child: ListView.separated(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
@@ -385,6 +385,19 @@ class _DealProductCardState extends State<_DealProductCard> {
                             height: 1.0,
                           ),
                         ),
+                        // Original price struck through when a sale/offer applies
+                        // (admin's original price vs sale price). Matches the web
+                        // storefront, which shows both.
+                        if (p.hasDiscount)
+                          Text(
+                            '\u20B9${p.price.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF94A3B8),
+                              decoration: TextDecoration.lineThrough,
+                              height: 1.0,
+                            ),
+                          ),
                         if (discount > 0)
                           Container(
                             padding: const EdgeInsets.symmetric(

@@ -87,8 +87,9 @@ class ProductCard extends StatelessWidget {
                       },
                     ),
                   ),
-                  // Discount badge - top left
-                  if (product.hasDiscount)
+                  // Offer badge - top left. Only for a real admin OFFER, never
+                  // a computed percent from a plain sale price.
+                  if (product.discountPercent > 0)
                     Positioned(
                       top: 8,
                       left: 8,
@@ -206,15 +207,17 @@ class ProductCard extends StatelessWidget {
                                   color: Colors.grey[500],
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${product.discountPercent.toStringAsFixed(0)}% off',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF388E3C),
+                              if (product.discountPercent > 0) ...[
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${product.discountPercent.toStringAsFixed(0)}% off',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF388E3C),
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                       ],
@@ -315,8 +318,8 @@ class ProductCardHorizontal extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Discount badge
-                  if (product.hasDiscount)
+                  // Offer badge — only for a real admin OFFER.
+                  if (product.discountPercent > 0)
                     Positioned(
                       top: 8,
                       left: 8,

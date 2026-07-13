@@ -86,8 +86,8 @@ class CompactProductCard extends StatelessWidget {
               ),
             ),
           ),
-          // Discount badge
-          if (product.hasDiscount)
+          // Offer badge — only for a real admin OFFER, not a computed sale %.
+          if (product.discountPercent > 0)
             Positioned(
               top: 6,
               left: 6,
@@ -338,8 +338,8 @@ class SpotlightProductCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Discount badge
-                    if (product.hasDiscount)
+                    // Offer badge — only for a real admin OFFER.
+                    if (product.discountPercent > 0)
                       Positioned(
                         top: 0,
                         left: 0,

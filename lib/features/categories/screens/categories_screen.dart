@@ -243,9 +243,10 @@ class _CompactProductCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    // Price
+                    // Price — sale/effective price bold, original struck when a
+                    // sale or offer applies; "% off" only for a real admin offer.
                     Text(
-                      CurrencyFormatter.format(product.price),
+                      CurrencyFormatter.format(product.effectivePrice),
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -263,15 +264,17 @@ class _CompactProductCard extends StatelessWidget {
                               color: Colors.grey[500],
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${product.discountPercent}% off',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF388E3C),
+                          if (product.discountPercent > 0) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${product.discountPercent}% off',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF388E3C),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                   ],

@@ -216,9 +216,9 @@ class ProductCard extends StatelessWidget {
                             color: AppColors.textPrimary,
                           ),
                         ),
-                        if (product.offerPrice != null) ...[
+                        // MRP strikethrough whenever a sale OR offer applies.
+                        if (product.hasDiscount) ...[
                           const SizedBox(width: 4),
-                          // MRP strikethrough
                           Flexible(
                             child: Text(
                               CurrencyFormatter.format(product.price),
@@ -231,16 +231,18 @@ class ProductCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          // Discount %
-                          Text(
-                            '${product.discountPercent.toStringAsFixed(0)}% off',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.priceGreen,
+                          // "% off" only for a real admin offer.
+                          if (product.discountPercent > 0) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${product.discountPercent.toStringAsFixed(0)}% off',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.priceGreen,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ],
                     ),

@@ -65,11 +65,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   /// do NOT inherit (a parent offer must not leak onto a variant). Mirrors the
   /// web detail page's option flattening.
   ProductVariant _mergeWithParent(Product p, ProductVariant v) {
+    // A variant with no price of its own inherits the parent's price AND the
+    // parent's sale price (e.g. a colour that just reuses the base phone). A
+    // variant that sets its OWN price uses its own sale price only (a null there
+    // means that variant genuinely has no sale). Offers never inherit.
+    final inheritsPrice = !(v.price > 0);
     return ProductVariant(
       id: v.id,
       color: (v.color ?? '').trim().isNotEmpty ? v.color : p.color,
-      price: v.price > 0 ? v.price : p.price,
+      price: inheritsPrice ? p.price : v.price,
       offerPrice: v.offerPrice,
+      salePrice: v.salePrice ?? (inheritsPrice ? p.salePrice : null),
       offerDiscountPercent: v.offerDiscountPercent,
       imageUrls: v.imageUrls.isNotEmpty ? v.imageUrls : p.imageUrls,
       stock: v.stock,
@@ -88,8 +94,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
   double _dispPrice(Product p) => _selectedVariant?.price ?? p.price;
   double _dispEffectivePrice(Product p) =>
       _selectedVariant?.effectivePrice ?? p.effectivePrice;
+  // Offer percent for the "% off" badge — an admin OFFER only, never a computed
+  // sale percent.
   int _dispDiscount(Product p) =>
       (_selectedVariant?.discountPercent ?? p.discountPercent).toInt();
+  // Whether a sale/offer applies — drives the struck original price + savings.
+  bool _dispHasDiscount(Product p) =>
+      _selectedVariant?.hasDiscount ?? p.hasDiscount;
 
   /// The product carrying the currently selected variant's price/image/label —
   /// used when adding to cart or buying now.
@@ -99,6 +110,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     return product.copyWith(
       price: v.price,
       offerPrice: v.offerPrice,
+      salePrice: v.salePrice,
       offerDiscountPercent: v.offerDiscountPercent,
       imageUrls: v.imageUrls.isNotEmpty ? v.imageUrls : product.imageUrls,
       variantLabel: [
@@ -192,9 +204,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
         widget.selectedVariantId != null &&
         product.variants.isNotEmpty) {
       _variantInitialized = true;
-      final initial = product.variants.firstWhere(
-        (v) => v.id == widget.selectedVariantId,
-        orElse: () => product.variants.first,
+      // Merge with the parent so a variant that inherits the parent's
+      // price/sale (no own price) shows the correct struck original + sale,
+      // not a bare ₹0 or the plain MRP.
+      final initial = _mergeWithParent(
+        product,
+        product.variants.firstWhere(
+          (v) => v.id == widget.selectedVariantId,
+          orElse: () => product.variants.first,
+        ),
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -887,6 +905,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
       color: product.color,
       price: product.price,
       offerPrice: product.offerPrice,
+      salePrice: product.salePrice,
       offerDiscountPercent: product.offerDiscountPercent,
       imageUrls: product.imageUrls,
       stock: product.stock,
@@ -1147,9 +1166,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
 
   Widget _buildPriceRow(Product product) {
     final discount = _dispDiscount(product);
+    final hasDiscount = _dispHasDiscount(product);
     final price = _dispPrice(product);
     final effectivePrice = _dispEffectivePrice(product);
-    final savings = discount > 0 ? price - effectivePrice : 0.0;
+    final savings = hasDiscount ? price - effectivePrice : 0.0;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -1180,7 +1200,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                   letterSpacing: -0.5,
                 ),
               ),
-              if (discount > 0) ...[
+              // Struck original price whenever a sale OR offer applies.
+              if (hasDiscount)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
@@ -1192,6 +1213,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                     ),
                   ),
                 ),
+              // "% off" badge only for a real admin OFFER, never a computed
+              // percent from a plain sale price.
+              if (discount > 0)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 3),
                   child: Text(
@@ -1203,7 +1227,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
                     ),
                   ),
                 ),
-              ],
             ],
           ),
           if (savings > 0) ...[

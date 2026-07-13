@@ -330,8 +330,8 @@ class _ProductCardState extends State<_ProductCard> {
                             },
                           ),
                         ),
-                        // Discount badge bottom-left
-                        if (product.hasDiscount)
+                        // Offer badge bottom-left — only for a real admin OFFER.
+                        if (product.discountPercent > 0)
                           Positioned(
                             bottom: 8,
                             left: 8,
@@ -388,15 +388,17 @@ class _ProductCardState extends State<_ProductCard> {
                             color: Colors.grey[400],
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${product.discountPercent.toInt()}% off',
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF388E3C),
+                        if (product.discountPercent > 0) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            '${product.discountPercent.toInt()}% off',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF388E3C),
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ],
                   ),

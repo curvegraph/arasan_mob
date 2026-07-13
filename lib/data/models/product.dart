@@ -46,6 +46,10 @@ class ProductVariant {
   final String? color;
   final double price;
   final double? offerPrice;
+  /// Admin-set sale price for this variant (no active offer). When set and below
+  /// [price] it's the selling price and [price] shows struck. An [offerPrice]
+  /// wins over it. Parsed from `variant_data.sale_price`.
+  final double? salePrice;
   final double? offerDiscountPercent;
   final List<String> imageUrls;
   final int stock;
@@ -56,6 +60,7 @@ class ProductVariant {
     this.color,
     required this.price,
     this.offerPrice,
+    this.salePrice,
     this.offerDiscountPercent,
     this.imageUrls = const [],
     this.stock = 0,
@@ -74,15 +79,30 @@ class ProductVariant {
     return color ?? 'Variant';
   }
 
-  double get effectivePrice => offerPrice ?? price;
+  /// The discounted selling price when one applies, else null. An active offer
+  /// ([offerPrice]) wins; otherwise the admin's [salePrice] is used. Only counts
+  /// when actually below [price].
+  double? get _discountedPrice {
+    if (offerPrice != null && offerPrice! < price) return offerPrice;
+    if (salePrice != null && salePrice! < price) return salePrice;
+    return null;
+  }
+
+  double get effectivePrice => _discountedPrice ?? price;
   String get imageUrl => imageUrls.isNotEmpty ? imageUrls.first : '';
   bool get isOutOfStock => stock <= 0;
 
+  /// True when a sale/offer applies — drives the struck original price display
+  /// (both a sale price and an offer count here).
+  bool get hasDiscount => _discountedPrice != null;
+
+  /// OFFER percent only (for the "% OFF" badge). 0 for a plain sale price — a
+  /// sale never produces a computed offer badge.
   double get discountPercent {
     if (offerDiscountPercent != null && offerDiscountPercent! > 0) {
       return offerDiscountPercent!;
     }
-    if (offerPrice != null && price > 0 && offerPrice! < price) {
+    if (offerPrice != null && offerPrice! < price && price > 0) {
       return ((price - offerPrice!) / price * 100).round().toDouble();
     }
     return 0;
@@ -101,6 +121,7 @@ class ProductVariant {
       color: vd['color']?.toString(),
       price: (vd['price'] as num?)?.toDouble() ?? 0,
       offerPrice: (vd['offer_price'] as num?)?.toDouble(),
+      salePrice: (vd['sale_price'] as num?)?.toDouble(),
       offerDiscountPercent: (vd['offer_discount_percent'] as num?)?.toDouble(),
       imageUrls: (vd['image_urls'] as List<dynamic>?)?.cast<String>() ?? const [],
       stock: (json['stock'] as num?)?.toInt() ?? 0,
@@ -116,6 +137,11 @@ class Product {
   final String category;
   final double price;
   final double? offerPrice;
+  /// The admin-set sale price for products WITHOUT an active offer. When set and
+  /// below [price], it becomes the selling price and [price] is shown struck as
+  /// the original. An active [offerPrice] takes priority over this. Parsed from
+  /// the backend's `sale_price` column.
+  final double? salePrice;
   final String description;
   final List<String> imageUrls;
   final String? thumbnailUrl;
@@ -162,6 +188,7 @@ class Product {
     required this.category,
     required this.price,
     this.offerPrice,
+    this.salePrice,
     required this.description,
     required this.imageUrls,
     this.thumbnailUrl,
@@ -191,6 +218,7 @@ class Product {
     String? category,
     double? price,
     double? offerPrice,
+    double? salePrice,
     String? description,
     List<String>? imageUrls,
     String? thumbnailUrl,
@@ -217,6 +245,7 @@ class Product {
       category: category ?? this.category,
       price: price ?? this.price,
       offerPrice: offerPrice ?? this.offerPrice,
+      salePrice: salePrice ?? this.salePrice,
       description: description ?? this.description,
       imageUrls: imageUrls ?? this.imageUrls,
       thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
@@ -240,28 +269,58 @@ class Product {
 
   bool get isLowStock => stock > 0 && stock <= 5;
   bool get isOutOfStock => stock == 0;
-  double get effectivePrice => offerPrice ?? price;
-  /// Advertised offer percent. Trusts the backend's offer record over a
-  /// price-ratio calculation, so a max-discount cap doesn't silently shrink
-  /// the displayed badge (e.g. "10% off" stays "10% off" even when the cap
-  /// limits the actual rupee saving to less).
+
+  /// The discounted selling price when one applies, else null. An active offer
+  /// ([offerPrice]) wins; otherwise the admin's [salePrice] is used (products
+  /// without an offer). Only counts when it's actually below [price].
+  double? get _discountedPrice {
+    if (offerPrice != null && offerPrice! < price) return offerPrice;
+    if (salePrice != null && salePrice! < price) return salePrice;
+    return null;
+  }
+
+  double get effectivePrice => _discountedPrice ?? price;
+
+  /// Advertised OFFER percent — for the "% OFF" badge. This reflects ONLY an
+  /// admin-created offer (offer_discount_percent, or a percent derived from the
+  /// offer's offer_price). It is deliberately 0 for a plain sale price: a
+  /// sale_price shows the struck original + sale price but NEVER a computed
+  /// "% OFF" badge (offers are admin-set, not calculated from the sale).
   double get discountPercent {
     if (offerDiscountPercent != null && offerDiscountPercent! > 0) {
       return offerDiscountPercent!;
     }
-    if (offerPrice != null) {
+    if (offerPrice != null && offerPrice! < price && price > 0) {
       return ((price - offerPrice!) / price * 100).round().toDouble();
     }
     return 0;
   }
 
-  // Helper getters for product cards
-  bool get hasDiscount => offerPrice != null && offerPrice! < price;
+  /// True when an admin OFFER applies (drives the "% OFF" badge). A sale price
+  /// alone does not count here — see [hasDiscount] for the struck-price display.
+  bool get hasOffer => discountPercent > 0;
+
+  // Helper getters for product cards. [hasDiscount] drives the struck original
+  // price + sale price display and is true for BOTH a sale price and an offer.
+  bool get hasDiscount => _discountedPrice != null;
   double? get originalPrice => hasDiscount ? price : null;
   String get imageUrl => imageUrls.isNotEmpty ? imageUrls.first : '';
 
   // JSON Serialization for Supabase
   factory Product.fromJson(Map<String, dynamic> json) {
+    final specs = (json['specs'] as Map<String, dynamic>?)?.map((k, v) => MapEntry(k, v.toString())) ?? <String, String>{};
+    final color = json['color']?.toString();
+    final hasVariants = json['has_variants'] == true ||
+        (json['variants'] is List && (json['variants'] as List).isNotEmpty);
+    // The backend resolves `variant_label` on homepage/section/offer cards, but
+    // the cart response carries no resolved label. Fall back to composing it
+    // from the product's own colour + specs — same "colour · storage · RAM"
+    // shape the backend uses — so the cart still shows which variant it is.
+    // Only for products that actually have variants (plain products stay bare).
+    final backendLabel = (json['variant_label'] as String?)?.trim();
+    final variantLabel = (backendLabel != null && backendLabel.isNotEmpty)
+        ? backendLabel
+        : (hasVariants ? _composeSpecLabel(color, specs) : null);
     return Product(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -269,12 +328,13 @@ class Product {
       category: json['category'] as String,
       price: (json['price'] as num).toDouble(),
       offerPrice: json['offer_price'] != null ? (json['offer_price'] as num).toDouble() : null,
+      salePrice: json['sale_price'] != null ? (json['sale_price'] as num).toDouble() : null,
       description: json['description'] as String? ?? '',
       imageUrls: (json['image_urls'] as List<dynamic>?)?.cast<String>() ?? [],
       stock: json['stock'] as int? ?? 0,
       isFeatured: json['is_featured'] as bool? ?? false,
       isActive: json['is_active'] as bool? ?? true,
-      specs: (json['specs'] as Map<String, dynamic>?)?.map((k, v) => MapEntry(k, v.toString())) ?? {},
+      specs: specs,
       displayOrder: json['display_order'] as int? ?? 0,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
       rating: (json['rating'] as num?)?.toDouble() ?? 0.0,
@@ -283,18 +343,30 @@ class Product {
       badges: ProductBadgeSettings.fromJson(json),
       offerDiscountPercent: (json['offer_discount_percent'] as num?)?.toDouble(),
       selectedVariantId: json['selected_variant_id'] as String?,
-      variantLabel: json['variant_label'] as String?,
+      variantLabel: variantLabel,
       variants: (json['variants'] as List<dynamic>?)
               ?.whereType<Map>()
               .map((e) => ProductVariant.fromJson(Map<String, dynamic>.from(e)))
               .toList() ??
           const [],
-      color: json['color']?.toString(),
+      color: color,
       // Backend tags homepage cards with this; also infer from an embedded
       // variants list when present.
-      hasVariants: json['has_variants'] == true ||
-          (json['variants'] is List && (json['variants'] as List).isNotEmpty),
+      hasVariants: hasVariants,
     );
+  }
+
+  /// Compose a "colour · storage · RAM" label from the product's own colour and
+  /// specs, mirroring the backend's `_variantLabel` helper. Returns null when
+  /// there's nothing to show.
+  static String? _composeSpecLabel(String? color, Map<String, String> specs) {
+    final parts = <String>[];
+    if ((color ?? '').trim().isNotEmpty) parts.add(color!.trim());
+    final storage = specs['storage'];
+    if ((storage ?? '').trim().isNotEmpty) parts.add(storage!.trim());
+    final ram = specs['ram'];
+    if ((ram ?? '').trim().isNotEmpty) parts.add('${ram!.trim()} RAM');
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   Map<String, dynamic> toJson() {
@@ -304,6 +376,7 @@ class Product {
       'category': category,
       'price': price,
       'offer_price': offerPrice,
+      'sale_price': salePrice,
       'description': description,
       'image_urls': imageUrls,
       'stock': stock,
