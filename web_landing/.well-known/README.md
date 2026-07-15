@@ -11,8 +11,18 @@ The app side is already wired:
 - Android: `android/app/src/main/AndroidManifest.xml` — verified intent-filter
   (`android:autoVerify="true"`, host `arasanmobiles.in`, pathPrefix `/product/`).
 - iOS: `ios/Runner/Runner.entitlements` — `applinks:arasanmobiles.in`.
-- Runtime: `lib/core/routing/deep_link_handler.dart` already maps the https link
-  to `/shop/product/<id>`.
+- Runtime: `lib/core/routing/deep_link_handler.dart` maps both the custom-scheme
+  (`com.arasanmobiles.user://product/<id>`) and the https link to
+  `/shop/product/<id>`.
+
+> **Routing fix (commit `db928ef`)** — inbound links are also mapped inside
+> go_router's `redirect` (`lib/core/routing/app_router.dart`), reusing
+> `DeepLinkHandler.locationFor`. This is required because Flutter pushes the raw
+> intent URI straight to go_router; without the redirect mapping the link landed
+> on go_router's **"Page Not Found"** (`GoException: no routes for location`).
+> Note `flutter_deeplinking_enabled=false` alone does **not** prevent this — the
+> redirect mapping is the actual fix. Verified end-to-end on an emulator: the
+> custom-scheme deep link now opens the product page.
 
 ## What YOU must do
 
