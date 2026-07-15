@@ -61,9 +61,11 @@ class DeepLinkHandler {
     router.go(location);
   }
 
-  /// Pure URI → in-app location mapper (also unit-testable in isolation).
+  /// Pure URI → in-app location mapper. Shared by the [uriLinkStream] handler
+  /// above and by the router's redirect (Flutter also pushes inbound intent
+  /// URIs straight to go_router, so the redirect must map them too — otherwise
+  /// go_router fails with "no routes for location").
   /// Returns null for links we don't own (OAuth callbacks, unknown shapes).
-  @visibleForTesting
   static String? locationFor(Uri uri) {
     // Never hijack the auth callback.
     if (uri.host == 'login-callback' ||

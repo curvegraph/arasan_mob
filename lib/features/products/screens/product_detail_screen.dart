@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -244,6 +245,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> with SingleTi
     final url = productShareUrl(product, variantId: _selectedVariant?.id);
     final text = '${product.name}\n$url';
     context.read<SharedProvider>().add(product.id);
+
+    // Attach the product image itself so the shared message always shows a
+    // picture. A plain link relies on WhatsApp fetching the website's
+    // OpenGraph preview, which is inconsistent (slow/large og:image → the
+    // crawler skips it, and WhatsApp caches that "no preview" for days).
+    // Sharing the already-cached image file guarantees an image every time.
+    final images = _dispImages(product);
+    if (images.isNotEmpty) {
+      try {
+        final file = await DefaultCacheManager().getSingleFile(images.first);
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: text,
+          subject: product.name,
+        );
+        return;
+      } catch (_) {
+        // Any download/cache miss falls back to the plain link share below.
+      }
+    }
     await Share.share(text, subject: product.name);
   }
 

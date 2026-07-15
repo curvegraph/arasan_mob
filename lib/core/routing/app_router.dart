@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'deep_link_handler.dart';
 import '../../providers/auth_provider.dart';
 import '../../shared/widgets/user_scaffold.dart';
 import '../../features/home/screens/home_screen.dart';
@@ -126,8 +127,8 @@ GoRouter createRouter(AuthProvider authProvider) {
       // Fire-and-forget; AuthProvider's listener will pick up the new session.
       //
       // Match ONLY the auth callback — the same custom scheme is also used for
-      // product deep links (com.arasanmobiles.user://product/<id>), which are
-      // handled by DeepLinkHandler and must not be redirected to /shop here.
+      // product deep links (com.arasanmobiles.user://product/<id>), mapped just
+      // below.
       final isOAuthCallback = uri.host == 'login-callback' ||
           path == '/login-callback' ||
           (uri.scheme == 'com.arasanmobiles.user' &&
@@ -141,6 +142,16 @@ GoRouter createRouter(AuthProvider authProvider) {
         }
         return '/shop';
       }
+
+      // Product deep links arrive here as the raw URI — the custom scheme
+      // (com.arasanmobiles.user://product/<id>) or the verified https App Link
+      // (https://arasanmobiles.in/product/<slug>/p/<id>) — because Flutter
+      // pushes inbound intent URIs straight to go_router. Map them to the
+      // in-app product route so go_router doesn't fail with "no routes for
+      // location". Mirrors DeepLinkHandler (which also handles them via the
+      // app_links stream); returns null for ordinary in-app paths.
+      final deepLinkLocation = DeepLinkHandler.locationFor(uri);
+      if (deepLinkLocation != null) return deepLinkLocation;
 
       // Redirect landing page to home
       if (path == '/') return '/shop';
