@@ -5,8 +5,7 @@
       "namespace": "android_app",
       "package_name": "com.arasanmobiles.arasan_user",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_PLAY_APP_SIGNING_SHA256",
-        "REPLACE_WITH_UPLOAD_KEY_SHA256_OPTIONAL"
+        "95:08:94:EE:80:4C:EF:39:54:32:7A:07:4F:0A:C8:60:B8:76:50:02:10:41:14:F3:94:6E:6F:0C:E3:C0:85:07"
       ]
     }
   }

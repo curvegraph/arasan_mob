@@ -87,7 +87,20 @@
     }
     function storeUrl() {
       if (isIOS) return CONFIG.APP_STORE_URL || '';
-      return CONFIG.PLAY_STORE_URL || '';
+      var base = CONFIG.PLAY_STORE_URL || '';
+      if (!base) return '';
+      // Deferred deep linking (Android): carry the product context THROUGH the
+      // Play Store install via the `referrer` param. Google delivers it back to
+      // the app on first launch (Install Referrer API), where
+      // DeferredDeepLinkHandler reads "product=<id>&variant=<v>" and opens the
+      // exact shared product — no re-search after install.
+      if (T.id) {
+        var ref = 'product=' + encodeURIComponent(T.id);
+        if (T.variant) ref += '&variant=' + encodeURIComponent(T.variant);
+        var sep = base.indexOf('?') === -1 ? '?' : '&';
+        base += sep + 'referrer=' + encodeURIComponent(ref);
+      }
+      return base;
     }
 
     // Try to open the app; if we're still here after a moment, the app isn't

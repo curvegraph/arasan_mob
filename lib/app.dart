@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/deep_link_handler.dart';
+import 'core/routing/deferred_deep_link_handler.dart';
 import 'providers/auth_provider.dart';
 import 'providers/product_provider.dart';
 import 'providers/wishlist_provider.dart';
@@ -189,6 +190,11 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
       // Start listening for inbound product deep links (custom scheme /
       // app links). Idempotent — only the first call wires up listeners.
       DeepLinkHandler.instance.init(_router!);
+      // Deferred deep linking: if this is the first launch after installing
+      // from a shared product link (Play Store install referrer), jump to that
+      // product. Self-guarded — runs once per install, Android-only, no-ops
+      // otherwise. See DeferredDeepLinkHandler.
+      DeferredDeepLinkHandler.instance.checkAndRoute(_router!);
     }
 
     return MaterialApp.router(
