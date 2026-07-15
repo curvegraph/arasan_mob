@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- iOS Universal Links: lets https://arasanmobiles.in/product/... open
+	     this app instead of Safari. Requires an apple-app-site-association
+	     file hosted at https://arasanmobiles.in/.well-known/ (see
+	     web_landing/.well-known/apple-app-site-association). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:arasanmobiles.in</string>
+	</array>
+</dict>
+</plist>
