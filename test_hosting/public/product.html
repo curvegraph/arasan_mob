@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Opening Arasan Mobiles…</title>
+  <meta property="og:title" content="Arasan Mobiles" />
+  <meta property="og:description" content="Open this product in the Arasan Mobiles app" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fff; color: #1a1a1a;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 24px; min-height: 100vh;
+    }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    p { color: #6b7280; font-size: 14px; margin: 0 0 26px; }
+    .spinner {
+      width: 26px; height: 26px; border: 3px solid #eee; border-top-color: #d32f2f;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 0 26px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn {
+      display: block; width: 100%; max-width: 320px; padding: 14px 16px;
+      border-radius: 12px; font-size: 15px; font-weight: 600; text-decoration: none;
+      margin-bottom: 12px; border: 1px solid transparent; cursor: pointer;
+    }
+    .btn-primary { background: #d32f2f; color: #fff; }
+    .btn-secondary { background: #fff; color: #1a1a1a; border-color: #e0e0e0; }
+    .hint { font-size: 12px; color: #9ca3af; margin-top: 10px; max-width: 320px; }
+  </style>
+</head>
+<body>
+  <div class="spinner" id="spinner"></div>
+  <h1>Opening in the Arasan Mobiles app…</h1>
+  <p>If the app doesn't open, choose an option below.</p>
+
+  <a href="#" id="openApp" class="btn btn-primary">Open in App</a>
+  <a href="#" id="getApp" class="btn btn-secondary">Install the App</a>
+  <div class="hint" id="waHint" style="display:none">
+    Tip: if you opened this from WhatsApp and nothing happens, tap the menu and choose
+    "Open in browser", then press <b>Open in App</b>.
+  </div>
+
+  <script>
+    // TEST-ONLY LAUNCHER — hosted on a Firebase test subdomain so we can prove the
+    // WhatsApp → app / install flow before the real arasanmobiles.in deploy.
+    var CONFIG = {
+      APP_SCHEME: 'com.arasanmobiles.user',
+      // Debug APK download URL. Replace with your Google Drive / Dropbox direct
+      // download link before deploying. Google Drive share links must be
+      // converted to direct download form:
+      //   https://drive.google.com/uc?export=download&id=FILE_ID
+      APK_URL: 'https://drive.google.com/uc?export=download&id=16kMTDENbq9caUtSuEgPeuVXb_1178FJb'
+    };
+
+    function parseTarget() {
+      var segs = window.location.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+      var id = '';
+      var pIdx = segs.lastIndexOf('p');
+      if (pIdx !== -1 && pIdx + 1 < segs.length) id = segs[pIdx + 1];
+      else if (segs.length) id = segs[segs.length - 1];
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('id')) id = params.get('id');
+      return { id: id, variant: params.get('variant') || '' };
+    }
+
+    var T = parseTarget();
+    var inWhatsApp = /WhatsApp/i.test(navigator.userAgent);
+
+    function appDeepLink() {
+      var q = T.variant ? ('?variant=' + encodeURIComponent(T.variant)) : '';
+      return CONFIG.APP_SCHEME + '://product/' + encodeURIComponent(T.id) + q;
+    }
+
+    var redirected = false;
+    function tryOpenApp(goInstallIfFail) {
+      var start = Date.now();
+      window.location.href = appDeepLink();
+      if (goInstallIfFail) {
+        setTimeout(function () {
+          if (document.hidden || redirected) return;
+          if (Date.now() - start < 2500 && CONFIG.APK_URL && CONFIG.APK_URL.indexOf('REPLACE_WITH') !== 0) {
+            redirected = true;
+            window.location.href = CONFIG.APK_URL;
+          }
+        }, 1500);
+      }
+    }
+
+    document.getElementById('openApp').addEventListener('click', function (e) {
+      e.preventDefault(); tryOpenApp(false);
+    });
+    document.getElementById('getApp').addEventListener('click', function (e) {
+      e.preventDefault();
+      if (CONFIG.APK_URL && CONFIG.APK_URL.indexOf('REPLACE_WITH') !== 0) {
+        window.location.href = CONFIG.APK_URL;
+      } else {
+        alert('APK download link not set yet. Ask the app owner to update CONFIG.APK_URL.');
+      }
+    });
+    document.getElementById('openApp').setAttribute('href', appDeepLink());
+    document.getElementById('getApp').setAttribute('href', CONFIG.APK_URL || '#');
+
+    if (inWhatsApp) {
+      document.getElementById('waHint').style.display = 'block';
+      document.getElementById('spinner').style.display = 'none';
+    } else if (T.id) {
+      tryOpenApp(true);
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { redirected = true; document.getElementById('spinner').style.display = 'none'; }
+    });
+  </script>
+</body>
+</html>
