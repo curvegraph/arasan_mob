@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -117,7 +118,14 @@ class SecureLocalStorage extends LocalStorage {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+
+  // Keep the native launch splash (the peacock on navy) on screen until the
+  // app has finished starting up, so the user sees ONE logo splash and then
+  // the homepage — no intermediate Flutter loading screen. [_AppBootstrap]
+  // calls FlutterNativeSplash.remove() the moment it's ready (or has to show
+  // the offline retry screen).
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
 
   // Bump Flutter's decoded-image cache so scrolling back to an already-seen
   // product/banner doesn't force a re-decode. Defaults are 1000 entries /
@@ -246,10 +254,24 @@ class _AppBootstrapState extends State<_AppBootstrap> {
     _retryTimer = Timer(Duration(seconds: secs), _boot);
   }
 
+  bool _splashRemoved = false;
+
+  /// Lift the native splash once, after the frame that first shows real
+  /// content (the homepage, or the offline retry screen) has been laid out —
+  /// so there's no flash of an empty screen between splash and content.
+  void _removeNativeSplashAfterFrame() {
+    if (_splashRemoved) return;
+    _splashRemoved = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Startup done — hand off to the real app.
+    // Startup done — hand off to the real app and reveal it (drop the splash).
     if (_activityProvider != null && _searchProvider != null) {
+      _removeNativeSplashAfterFrame();
       return MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AuthProvider()),
@@ -276,58 +298,122 @@ class _AppBootstrapState extends State<_AppBootstrap> {
       );
     }
 
-    // Still booting or the last attempt failed — always render something so
-    // the engine never sits on a black screen.
-    return MaterialApp(
+    // First attempt failed (offline) — reveal the retry-able "no connection"
+    // screen (which self-heals when the network returns).
+    if (_error != null) {
+      _removeNativeSplashAfterFrame();
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: _BootScreen(error: _error, onRetry: _boot),
+      );
+    }
+
+    // Still starting up for the first time: keep the native splash on screen
+    // (it sits on top of this) so the user just sees the logo splash. This
+    // navy filler only matters for the split second before/after the splash.
+    return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: _BootScreen(error: _error, onRetry: _boot),
+      home: Scaffold(backgroundColor: Color(0xFF1F5593)),
     );
   }
 }
 
-/// Lightweight pre-app screen: a spinner while startup is in flight, or a
-/// "no connection" message with a Retry button when it has failed.
+/// Branded pre-app screen. Renders the Arasan peacock + shop name on the
+/// logo's navy background so it continues seamlessly from the native launch
+/// splash (see the flutter_native_splash config in pubspec.yaml). Shows a
+/// quiet spinner while startup is in flight, or a "no connection" message
+/// with a Retry button when it has failed.
 class _BootScreen extends StatelessWidget {
   final String? error;
   final Future<void> Function() onRetry;
   const _BootScreen({required this.error, required this.onRetry});
 
+  // Sampled from assets/logo_round.png's ring so the circular logo blends
+  // seamlessly into the background (no visible rectangle).
+  static const Color _navy = Color(0xFF1F5593);
+  static const Color _lime = Color(0xFFC6DE22);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: error == null
-            ? const CircularProgressIndicator()
-            : Padding(
-                padding: const EdgeInsets.all(32),
+      backgroundColor: _navy,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Spacer(flex: 2),
+            // logo_round has transparent corners, so it renders as a clean
+            // disc on the matching background instead of a rectangle.
+            Image.asset('assets/logo_round.png', width: 150),
+            const SizedBox(height: 18),
+            const Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: 'Arasan ',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold),
+                ),
+                TextSpan(
+                  text: 'Mobiles',
+                  style: TextStyle(
+                      color: _lime,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold),
+                ),
+              ]),
+              textAlign: TextAlign.center,
+            ),
+            const Spacer(flex: 3),
+            if (error == null)
+              const SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation(Colors.white70),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.wifi_off_rounded,
-                        size: 64, color: Colors.grey),
-                    const SizedBox(height: 16),
+                        size: 44, color: Colors.white70),
+                    const SizedBox(height: 12),
                     const Text(
                       'No internet connection',
                       style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w600),
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     const Text(
-                      'Check your connection and try again. '
-                      "We'll reconnect automatically once you're back online.",
+                      "Check your connection. We'll reconnect "
+                      "automatically once you're back online.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 18),
                     ElevatedButton.icon(
                       onPressed: () => onRetry(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: _navy,
+                      ),
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry'),
                     ),
                   ],
                 ),
               ),
+            const SizedBox(height: 56),
+          ],
+        ),
       ),
     );
   }

@@ -36,6 +36,10 @@ dependencies:
   flutter_sticky_header: ^0.8.0
   firebase_core: ^4.7.0
   firebase_auth: ^6.4.0
+  # Runtime API (FlutterNativeSplash.preserve/remove) is used in main.dart to
+  # hold the native splash until the app is ready, so it must be a regular
+  # dependency (not dev-only).
+  flutter_native_splash: ^2.4.4
 
 dev_dependencies:
   flutter_test:
@@ -51,6 +55,21 @@ flutter_launcher_icons:
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/logo_round.png"
 
+# Branded native launch/splash: the Arasan peacock on the logo's navy-blue
+# background, shown on every device (dark mode + the Android 12+ splash API)
+# so cold start no longer flashes a blank/black screen. The Flutter-side
+# _BootScreen renders the same logo + "Arasan Mobiles" on the same navy so the
+# hand-off is seamless. Regenerate after edits with:
+#   dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#1F5593"
+  image: assets/logo_round.png
+  android: true
+  ios: true
+  android_12:
+    color: "#1F5593"
+    image: assets/logo_round.png
+
 flutter:
   uses-material-design: true
   assets:
@@ -58,3 +77,4 @@ flutter:
     - .env.live
     - assets/banners/
     - assets/logo.png
+    - assets/logo_round.png

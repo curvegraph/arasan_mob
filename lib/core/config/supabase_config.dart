@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Supabase config for the user app.
 ///
@@ -35,11 +37,67 @@ class SupabaseConfig {
     return 'http://localhost:3001/api';
   }
 
-  /// Fetches the Supabase URL + anon key from the backend. Idempotent —
-  /// the first successful call populates the cache; later calls no-op.
+  static const String _prefsUrlKey = 'supabase_config_url';
+  static const String _prefsAnonKey = 'supabase_config_anon';
+
+  /// Loads the Supabase URL + anon key. Idempotent — later calls no-op.
+  ///
+  /// Cache-first: once a launch has fetched the config we persist it, so every
+  /// subsequent launch starts INSTANTLY from the stored values (no blocking
+  /// network round trip on the startup path) and only refreshes the cache in
+  /// the background. Only the very first launch — or one after the cache is
+  /// cleared — has to wait for the backend.
   static Future<void> loadFromBackend() async {
     if (_loaded) return;
-    final uri = Uri.parse('${_apiBase}/auth/supabase-config');
+
+    final prefs = await SharedPreferences.getInstance();
+    final cachedUrl = (prefs.getString(_prefsUrlKey) ?? '').trim();
+    final cachedAnon = (prefs.getString(_prefsAnonKey) ?? '').trim();
+
+    if (cachedUrl.isNotEmpty && cachedAnon.isNotEmpty) {
+      _url = cachedUrl;
+      _anonKey = cachedAnon;
+      _loaded = true;
+      // Refresh the stored config for the next launch without blocking this
+      // one; swallow errors so an offline refresh never surfaces.
+      unawaited(_refreshCache(prefs));
+      if (kDebugMode) {
+        debugPrint('SupabaseConfig: loaded from cache ($_url)');
+      }
+      return;
+    }
+
+    // No cache yet — must fetch before Supabase can be initialised.
+    final config = await _fetchConfig();
+    _url = config.url;
+    _anonKey = config.anonKey;
+    _loaded = true;
+    await _store(prefs, config);
+    if (kDebugMode) {
+      debugPrint('SupabaseConfig: loaded from backend ($_url)');
+    }
+  }
+
+  /// Background-only: re-fetch and overwrite the stored config so a rotated
+  /// url/key is picked up on the next launch. Does not touch the live in-memory
+  /// values (Supabase is already initialised with them this session).
+  static Future<void> _refreshCache(SharedPreferences prefs) async {
+    try {
+      final config = await _fetchConfig();
+      await _store(prefs, config);
+    } catch (_) {
+      // Offline / transient — keep the existing cache.
+    }
+  }
+
+  static Future<void> _store(
+      SharedPreferences prefs, _SupabaseCreds config) async {
+    await prefs.setString(_prefsUrlKey, config.url);
+    await prefs.setString(_prefsAnonKey, config.anonKey);
+  }
+
+  static Future<_SupabaseCreds> _fetchConfig() async {
+    final uri = Uri.parse('$_apiBase/auth/supabase-config');
     final res = await http.get(uri).timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) {
       throw Exception(
@@ -51,14 +109,17 @@ class SupabaseConfig {
       throw Exception('Bad config payload: ${res.body}');
     }
     final data = body['data'] as Map<String, dynamic>;
-    _url = (data['url'] as String? ?? '').trim();
-    _anonKey = (data['anonKey'] as String? ?? '').trim();
-    if (_url.isEmpty || _anonKey.isEmpty) {
+    final url = (data['url'] as String? ?? '').trim();
+    final anonKey = (data['anonKey'] as String? ?? '').trim();
+    if (url.isEmpty || anonKey.isEmpty) {
       throw Exception('Backend returned empty Supabase config');
     }
-    _loaded = true;
-    if (kDebugMode) {
-      debugPrint('SupabaseConfig: loaded from backend (${_url})');
-    }
+    return _SupabaseCreds(url, anonKey);
   }
+}
+
+class _SupabaseCreds {
+  final String url;
+  final String anonKey;
+  const _SupabaseCreds(this.url, this.anonKey);
 }
