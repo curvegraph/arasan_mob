@@ -114,9 +114,9 @@ class _HeaderBarState extends State<_HeaderBar> with SingleTickerProviderStateMi
       },
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0F172A),
+          color: Colors.white,
           border: Border(
-            bottom: BorderSide(color: Color(0x66334155), width: 1),
+            bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
           ),
         ),
         child: SafeArea(
@@ -325,9 +325,9 @@ class _Logo extends StatelessWidget {
     //   "Mobiles" \u2192 text-success #16A34A
     //   "\u00AE"       \u2192 slate-200    #E2E8F0 (light grey on the navy chrome)
     final double logoSize = mobileSize ? 32 : 50;
-    final double nameSize = mobileSize ? 13 : (compactWordmark ? 24 : 26);
-    final double regSize = mobileSize ? 8 : (compactWordmark ? 13 : 14);
-    final double regOffset = mobileSize ? -5 : (compactWordmark ? -9 : -10);
+    final double nameSize = mobileSize ? 17 : (compactWordmark ? 24 : 26);
+    final double regSize = mobileSize ? 10 : (compactWordmark ? 13 : 14);
+    final double regOffset = mobileSize ? -6 : (compactWordmark ? -9 : -10);
     final double gap = mobileSize ? 6 : (compactWordmark ? 8 : 10);
     return GestureDetector(
       onTap: () => context.go('/shop'),
@@ -376,7 +376,7 @@ class _Logo extends StatelessWidget {
                       child: Text(
                         '\u00AE',
                         style: TextStyle(
-                          color: const Color(0xFFE2E8F0),
+                          color: const Color(0xFF64748B),
                           fontSize: regSize,
                           fontWeight: FontWeight.w700,
                         ),
@@ -502,12 +502,12 @@ class _SearchBarState extends State<_SearchBar> {
         constraints: BoxConstraints(maxWidth: mobile ? double.infinity : 720),
         padding: EdgeInsets.only(left: mobile ? 12 : 18, right: mobile ? 8 : 6),
         decoration: BoxDecoration(
-          color: const Color(0x99334155),
+          color: const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Row(
           children: [
-            Icon(Icons.search, size: mobile ? 18 : 22, color: const Color(0xFFCBD5E1)),
+            Icon(Icons.search, size: mobile ? 18 : 22, color: const Color(0xFF64748B)),
             SizedBox(width: mobile ? 8 : 12),
             Expanded(
               child: TextField(
@@ -515,8 +515,8 @@ class _SearchBarState extends State<_SearchBar> {
                 focusNode: _focusNode,
                 textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _performSearch(),
-                style: TextStyle(fontSize: mobile ? 13 : 15, color: Colors.white),
-                cursorColor: Colors.white,
+                style: TextStyle(fontSize: mobile ? 13 : 15, color: const Color(0xFF0F172A)),
+                cursorColor: AppColors.primary,
                 decoration: InputDecoration(
                   hintText: mobile
                       ? 'Search products...'
@@ -1054,7 +1054,7 @@ class _ActionIconState extends State<_ActionIcon> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: _hovering ? const Color(0x66334155) : Colors.transparent,
+            color: _hovering ? const Color(0x14334155) : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -1075,7 +1075,7 @@ class _ActionIconState extends State<_ActionIcon> {
                 backgroundColor: widget.badgeColor ?? const Color(0xFFFF3D00),
                 child: Icon(
                   widget.icon,
-                  color: _hovering ? Colors.white : const Color(0xFFE2E8F0),
+                  color: _hovering ? AppColors.primary : const Color(0xFF334155),
                   size: 26,
                 ),
               ),
@@ -1084,7 +1084,7 @@ class _ActionIconState extends State<_ActionIcon> {
                 Text(
                   widget.label!,
                   style: TextStyle(
-                    color: _hovering ? Colors.white : const Color(0xFFCBD5E1),
+                    color: _hovering ? AppColors.primary : const Color(0xFF475569),
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.2,
