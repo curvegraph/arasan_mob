@@ -15,6 +15,13 @@ class HomepageProvider extends ChangeNotifier {
   Timer? _pollTimer;
   bool _isSubscribed = false;
 
+  // Fast self-heal after a failed fetch. connectivity_plus only reports the
+  // network *interface* (wifi/mobile), so an internet-level outage while wifi
+  // stays connected never fires a reconnect event — recovery would otherwise
+  // wait for the slow 60s poll. This retries on a short backoff instead.
+  Timer? _retryTimer;
+  int _retryAttempt = 0;
+
   // Getters
   homepage_models.HomepageConfig? get config => _config;
   bool get isLoading => _isLoading;
@@ -106,11 +113,20 @@ class HomepageProvider extends ChangeNotifier {
         flashDeal: supabaseConfig.flashDeal,
       );
       _error = null;
+      _cancelRetry(); // fetch succeeded — stop any pending self-heal retries
     } catch (e) {
       _error = e.toString();
       debugPrint('[HomepageProvider] Error loading config: $e');
-      // No fallback - show empty homepage until admin publishes one
-      _config = homepage_models.HomepageConfig.empty();
+      // Preserve the last-known-good homepage across a transient failure. Only
+      // fall back to an empty config on the FIRST load (nothing cached yet) —
+      // otherwise a flaky-network poll would wipe products the user is already
+      // viewing and collapse the page to a misleading "Network issue" state.
+      _config ??= homepage_models.HomepageConfig.empty();
+      // Self-heal: retry on a short backoff so products come back within a few
+      // seconds of the connection recovering, without waiting for the 60s poll
+      // or a connectivity-interface change (which never fires for an
+      // internet-level outage while wifi stays connected).
+      _scheduleRetry();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -222,6 +238,25 @@ class HomepageProvider extends ChangeNotifier {
     _pollTimer?.cancel();
     _pollTimer = null;
     _isSubscribed = false;
+    _cancelRetry();
+  }
+
+  /// Schedule a self-heal retry after a failed fetch, with capped exponential
+  /// backoff (3s, 6s, 12s, 24s, then 30s). Stops as soon as a fetch succeeds
+  /// (see [_cancelRetry]).
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    final secs = (3 * (1 << _retryAttempt)).clamp(3, 30);
+    if (_retryAttempt < 4) _retryAttempt++;
+    _retryTimer = Timer(Duration(seconds: secs), () {
+      loadHomepageConfig(forceRefresh: true);
+    });
+  }
+
+  void _cancelRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _retryAttempt = 0;
   }
 
   /// Clean up resources when provider is disposed
