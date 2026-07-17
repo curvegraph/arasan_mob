@@ -2,10 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_colors.dart';
 import '../../../data/models/product.dart';
 import '../../../providers/homepage_provider.dart';
-import '../../../shared/widgets/animated_product_image.dart';
 
 /// Flash Deals section — gradient background, countdown timer, auto-scrolling carousel.
 /// Fetches only the deal products it needs (not the full catalog).
@@ -222,7 +220,7 @@ class _DealsSectionState extends State<DealsSection> {
             // Hug the card: square image + name + price all live inside the box.
             // Enough for the sale price + struck original price + discount chip
             // to wrap to extra lines on narrow cards without overflowing the box.
-            height: cardWidth + (isWide ? 90 : 80),
+            height: cardWidth + (isWide ? 70 : 62),
             child: ListView.separated(
               controller: _scrollController,
               scrollDirection: Axis.horizontal,
@@ -288,6 +286,8 @@ class _DealProductCardState extends State<_DealProductCard> {
           ),
           clipBehavior: Clip.hardEdge,
           child: Column(
+            // Hug the content so there's no empty white below the price.
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Square product image \u2014 contain + inset so the looping animation
@@ -297,34 +297,53 @@ class _DealProductCardState extends State<_DealProductCard> {
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
+                    // Full-bleed product image (cover) \u2014 big and clean, no
+                    // animation inset box, matching the products-grid card.
                     Positioned.fill(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 2),
-                        child: p.imageUrl.isNotEmpty
-                            ? AnimatedProductImage(
-                                animation: p.imageAnimation,
-                                child: AnimatedScale(
-                                  scale: _hovered ? 1.03 : 1.0,
-                                  duration: const Duration(milliseconds: 500),
-                                  curve: Curves.easeOut,
-                                  child: Image.network(
-                                    p.imageUrl,
-                                    fit: BoxFit.contain,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    cacheWidth: 320,
-                                    filterQuality: FilterQuality.medium,
-                                    errorBuilder: (_, __, ___) => const Center(
-                                      child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
-                                    ),
-                                  ),
+                      child: p.imageUrl.isNotEmpty
+                          ? AnimatedScale(
+                              scale: _hovered ? 1.03 : 1.0,
+                              duration: const Duration(milliseconds: 500),
+                              curve: Curves.easeOut,
+                              child: Image.network(
+                                p.imageUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                cacheWidth: 320,
+                                filterQuality: FilterQuality.medium,
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
                                 ),
-                              )
-                            : const Center(
-                                child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
                               ),
-                      ),
+                            )
+                          : const Center(
+                              child: Text('\uD83D\uDCF1', style: TextStyle(fontSize: 28)),
+                            ),
                     ),
+                    // Discount badge overlapping the top-left of the image.
+                    if (discount > 0)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF16A34A),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '$discount% OFF',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                      ),
                     if (outOfStock)
                       Positioned.fill(
                         child: Container(
@@ -355,7 +374,7 @@ class _DealProductCardState extends State<_DealProductCard> {
               ),
               // Name + price INSIDE the box (dark text on white).
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -396,24 +415,6 @@ class _DealProductCardState extends State<_DealProductCard> {
                               color: Color(0xFF94A3B8),
                               decoration: TextDecoration.lineThrough,
                               height: 1.0,
-                            ),
-                          ),
-                        if (discount > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF16A34A),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '$discount% OFF',
-                              style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: 0.2,
-                              ),
                             ),
                           ),
                       ],
