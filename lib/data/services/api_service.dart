@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,10 +22,21 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  static const String _baseUrl = String.fromEnvironment(
-    'API_URL',
-    defaultValue: 'http://localhost:3001/api',
-  );
+  /// Backend base URL. Single source of truth shared with [SupabaseConfig]:
+  /// --dart-define=API_URL wins (CI/prod), then the loaded .env file
+  /// (`.env.<ENV>`), else localhost for local dev.
+  ///
+  /// NOTE: this was previously a compile-time `const String.fromEnvironment`,
+  /// which ignored the .env files entirely — so an installed APK that wasn't
+  /// built with an explicit --dart-define always hit localhost and failed with
+  /// a network error. Reading dotenv here keeps `.env.live` authoritative.
+  static String get _baseUrl {
+    const fromDefine = String.fromEnvironment('API_URL');
+    if (fromDefine.isNotEmpty) return fromDefine;
+    final fromEnv = (dotenv.env['API_URL'] ?? '').trim();
+    if (fromEnv.isNotEmpty) return fromEnv;
+    return 'http://localhost:3001/api';
+  }
 
   static const _requestTimeout = Duration(seconds: 15);
   static const _maxRetries = 3;

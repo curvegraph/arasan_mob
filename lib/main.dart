@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -129,14 +130,10 @@ Future<void> main() async {
   const env = String.fromEnvironment('ENV', defaultValue: 'live');
   await dotenv.load(fileName: '.env.$env');
 
-  // Pull Supabase URL + anon key from the backend. This repo carries no
-  // Supabase credentials anymore — `backend/.env` is the only source.
-  await SupabaseConfig.loadFromBackend();
-
-  // Native secure encrypted storage for Supabase session persistence.
+  // Native secure encrypted storage for Supabase session persistence. This is
+  // local-only, so it's safe to do before we have network.
   final secureStorage = SecureLocalStorage();
   await secureStorage.initialize();
-  final LocalStorage localStorage = secureStorage;
 
   // Initialize Firebase for phone authentication.
   // Tolerate missing/placeholder config so the app still boots; phone login
@@ -151,48 +148,187 @@ Future<void> main() async {
     FirebaseAvailability.markUnavailable(e.toString());
   }
 
-  // Initialize Supabase with persistent session storage
-  await Supabase.initialize(
-    url: SupabaseConfig.supabaseUrl,
-    anonKey: SupabaseConfig.supabaseAnonKey,
-    authOptions: FlutterAuthClientOptions(
-      authFlowType: AuthFlowType.pkce,
-      localStorage: localStorage,
-    ),
-  );
+  // The remaining startup steps need the network (they fetch the Supabase
+  // url/anon key from the backend, then init Supabase). If they ran here,
+  // before runApp, a cold start with no internet would throw and leave the
+  // engine on a black screen with no way to recover until the app is killed
+  // and reopened. Defer them into [_AppBootstrap], which keeps a UI mounted
+  // and shows a retry-able "no connection" screen that self-heals when the
+  // network returns.
+  runApp(_AppBootstrap(localStorage: secureStorage));
+}
 
-  // Initialize UserActivityProvider (loads persisted data from SharedPreferences)
-  final activityProvider = UserActivityProvider();
-  await activityProvider.init();
+/// Gates the app on the async, network-dependent startup steps (backend
+/// Supabase config + `Supabase.initialize`). Guarantees a widget tree is
+/// always mounted, so a boot-time network failure shows a retry-able screen
+/// and self-heals on reconnect instead of a black screen.
+class _AppBootstrap extends StatefulWidget {
+  final LocalStorage localStorage;
+  const _AppBootstrap({required this.localStorage});
 
-  // Link SearchProvider to UserActivityProvider
-  final searchProvider = SearchProvider();
-  searchProvider.setActivityProvider(activityProvider);
+  @override
+  State<_AppBootstrap> createState() => _AppBootstrapState();
+}
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => PhoneAuthProvider()),
-        ChangeNotifierProvider(create: (_) => ProductProvider()),
-        ChangeNotifierProvider(create: (_) => BannerProvider()),
-        ChangeNotifierProvider(create: (_) => OfferProvider()),
-        ChangeNotifierProvider(create: (_) => CartProvider()),
-        ChangeNotifierProvider(create: (_) => WishlistProvider()),
-        ChangeNotifierProvider(create: (_) => SharedProvider()..load()),
-        ChangeNotifierProvider(create: (_) => UserOrderProvider()),
-        ChangeNotifierProvider(create: (_) => ReviewProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationProvider()),
-        ChangeNotifierProvider.value(value: searchProvider),
-        ChangeNotifierProvider(create: (_) => CheckoutProvider()),
-        ChangeNotifierProvider(create: (_) => UserProfileProvider()),
-        ChangeNotifierProvider(create: (_) => SupportProvider()),
-        ChangeNotifierProvider(create: (_) => UserNavigationProvider()),
-        ChangeNotifierProvider(create: (_) => HomepageProvider()),
-        ChangeNotifierProvider.value(value: activityProvider),
-        ChangeNotifierProvider(create: (_) => StoreSettingsProvider()),
-      ],
-      child: const ArasanUserApp(),
-    ),
-  );
+class _AppBootstrapState extends State<_AppBootstrap> {
+  String? _error; // null while trying; set when the last attempt failed.
+  bool _booting = false;
+  bool _supabaseReady = false; // Supabase.initialize may run only once.
+  UserActivityProvider? _activityProvider;
+  SearchProvider? _searchProvider;
+  Timer? _retryTimer;
+  int _attempt = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _boot();
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _boot() async {
+    if (_booting) return; // guard manual-retry + timer firing together
+    _booting = true;
+    _retryTimer?.cancel();
+    if (mounted && _error != null) setState(() => _error = null);
+    try {
+      // Fetch Supabase url/anon key from the backend (idempotent — no-ops once
+      // it has succeeded, so a retry after a partial failure is cheap).
+      await SupabaseConfig.loadFromBackend();
+
+      // Init Supabase exactly once, even across retries.
+      if (!_supabaseReady) {
+        await Supabase.initialize(
+          url: SupabaseConfig.supabaseUrl,
+          anonKey: SupabaseConfig.supabaseAnonKey,
+          authOptions: FlutterAuthClientOptions(
+            authFlowType: AuthFlowType.pkce,
+            localStorage: widget.localStorage,
+          ),
+        );
+        _supabaseReady = true;
+      }
+
+      // Local (non-network) providers.
+      final activity = UserActivityProvider();
+      await activity.init();
+      final search = SearchProvider()..setActivityProvider(activity);
+
+      _attempt = 0;
+      if (mounted) {
+        setState(() {
+          _activityProvider = activity;
+          _searchProvider = search;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('[AppBootstrap] startup failed: $e');
+      if (mounted) setState(() => _error = e.toString());
+      _scheduleRetry();
+    } finally {
+      _booting = false;
+    }
+  }
+
+  /// Auto-retry on a capped backoff (2s, 4s, 8s, 16s, then 20s) so the app
+  /// comes up within seconds of the connection recovering, without the user
+  /// having to tap Retry.
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    final secs = (2 * (1 << _attempt)).clamp(2, 20);
+    if (_attempt < 4) _attempt++;
+    _retryTimer = Timer(Duration(seconds: secs), _boot);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Startup done — hand off to the real app.
+    if (_activityProvider != null && _searchProvider != null) {
+      return MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AuthProvider()),
+          ChangeNotifierProvider(create: (_) => PhoneAuthProvider()),
+          ChangeNotifierProvider(create: (_) => ProductProvider()),
+          ChangeNotifierProvider(create: (_) => BannerProvider()),
+          ChangeNotifierProvider(create: (_) => OfferProvider()),
+          ChangeNotifierProvider(create: (_) => CartProvider()),
+          ChangeNotifierProvider(create: (_) => WishlistProvider()),
+          ChangeNotifierProvider(create: (_) => SharedProvider()..load()),
+          ChangeNotifierProvider(create: (_) => UserOrderProvider()),
+          ChangeNotifierProvider(create: (_) => ReviewProvider()),
+          ChangeNotifierProvider(create: (_) => NotificationProvider()),
+          ChangeNotifierProvider.value(value: _searchProvider!),
+          ChangeNotifierProvider(create: (_) => CheckoutProvider()),
+          ChangeNotifierProvider(create: (_) => UserProfileProvider()),
+          ChangeNotifierProvider(create: (_) => SupportProvider()),
+          ChangeNotifierProvider(create: (_) => UserNavigationProvider()),
+          ChangeNotifierProvider(create: (_) => HomepageProvider()),
+          ChangeNotifierProvider.value(value: _activityProvider!),
+          ChangeNotifierProvider(create: (_) => StoreSettingsProvider()),
+        ],
+        child: const ArasanUserApp(),
+      );
+    }
+
+    // Still booting or the last attempt failed — always render something so
+    // the engine never sits on a black screen.
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: _BootScreen(error: _error, onRetry: _boot),
+    );
+  }
+}
+
+/// Lightweight pre-app screen: a spinner while startup is in flight, or a
+/// "no connection" message with a Retry button when it has failed.
+class _BootScreen extends StatelessWidget {
+  final String? error;
+  final Future<void> Function() onRetry;
+  const _BootScreen({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: error == null
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off_rounded,
+                        size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No internet connection',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Check your connection and try again. '
+                      "We'll reconnect automatically once you're back online.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () => onRetry(),
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
 }
