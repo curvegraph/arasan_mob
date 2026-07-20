@@ -235,19 +235,30 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
     final profileProvider = context.read<UserProfileProvider>();
     final cart = cartProvider.cart;
 
-    // If the user opted into email updates, the email must be verified first.
-    if (_wantsEmailUpdates == true && !_updatesEmailVerified) {
+    // The account's already-verified email (Google / email sign-in). Phone-only
+    // accounts have none — they use the Yes/No opt-in in the form.
+    final accountEmail = _realProfileEmail();
+
+    // Only PHONE users get asked Yes/No, and if they said Yes their email must
+    // be verified first. Google users already have a verified email, so this
+    // never blocks them.
+    if (accountEmail.isEmpty &&
+        _wantsEmailUpdates == true &&
+        !_updatesEmailVerified) {
       _showCheckoutSnack('Please verify your email to get updates, or choose "No".');
       return;
     }
 
-    // Send order emails (confirmation + invoice) ONLY when the user opted into
-    // email updates AND verified the address. If they chose "No" (or left it
-    // unset), pass an empty email so the backend skips the confirmation/invoice
-    // email entirely.
-    final orderEmail = (_wantsEmailUpdates == true && _updatesEmailVerified)
-        ? _updatesEmailController.text.trim()
-        : '';
+    // Email attached to the order (also the confirmation-email recipient):
+    //  • Google/email sign-in → always the verified account email (auto opt-in).
+    //  • Phone + "Yes" (verified) → the entered, verified email.
+    //  • Phone + "No"/unset → empty, so no confirmation email is sent. The order
+    //    still places (the backend treats the email as optional).
+    final orderEmail = accountEmail.isNotEmpty
+        ? accountEmail
+        : (_wantsEmailUpdates == true && _updatesEmailVerified
+            ? _updatesEmailController.text.trim()
+            : '');
 
     UserAddress? address;
 
@@ -1837,7 +1848,43 @@ class _UserCheckoutScreenState extends State<UserCheckoutScreen> {
   /// and payment sections. Yes reveals an email box that must be verified
   /// (existing account email is trusted; any changed email needs an OTP).
   Widget _buildEmailUpdatesSection() {
-    _trustedEmail = _realProfileEmail().toLowerCase();
+    final accountEmail = _realProfileEmail();
+    _trustedEmail = accountEmail.toLowerCase();
+
+    // Google / email sign-in: the account email is already verified, so don't
+    // ask Yes/No — just show that order updates go to that email (auto opt-in).
+    if (accountEmail.isNotEmpty) {
+      return Row(
+        children: [
+          const Text(
+            'Get updates by email',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              accountEmail,
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Icon(Icons.check_circle, size: 16, color: AppColors.success),
+        ],
+      );
+    }
+
+    // Phone-only sign-in: ask Yes/No. "No" still places the order (no email);
+    // "Yes" requires OTP-verifying the entered email.
     final wants = _wantsEmailUpdates == true;
     final verified = _updatesEmailVerified;
 
