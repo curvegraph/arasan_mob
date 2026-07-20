@@ -81,6 +81,7 @@ class DeepLinkHandler {
     final query = (variant != null && variant.isNotEmpty)
         ? '?variant=${Uri.encodeQueryComponent(variant)}'
         : '';
+    // Go straight to the product (no splash) — standard deep-link behaviour.
     return '/shop/product/$productId$query';
   }
 

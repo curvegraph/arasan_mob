@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'features/splash/widgets/branded_splash.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/deep_link_handler.dart';
@@ -88,6 +88,7 @@ class _OfflineScreen extends StatelessWidget {
 class _ArasanUserAppState extends State<ArasanUserApp> {
   GoRouter? _router;
   bool _wishlistLoaded = false;
+  bool _splashRemoved = false;
 
   // Global messenger so the connectivity watcher can post snackbars from
   // outside any page's Scaffold.
@@ -109,6 +110,18 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
   void dispose() {
     _connSub?.cancel();
     super.dispose();
+  }
+
+  /// Lift the native Android logo splash after the destination page's first
+  /// frame, so the user goes straight from the ONE Android logo splash to the
+  /// Home page (normal launch) or the product page (deep link) — no separate
+  /// Flutter splash, no blank screen in between.
+  void _removeNativeSplashAfterFrame() {
+    if (_splashRemoved) return;
+    _splashRemoved = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
   }
 
   /// Mirrors the web storefront: while offline a full-screen "You're offline"
@@ -152,13 +165,13 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
     final authProvider = context.watch<AuthProvider>();
 
     // Wait for auth to initialize before showing the app (auto-login must
-    // finish before routing). Keep the branded splash (logo + shop name on the
-    // launch navy) on screen during this brief init so the logo stays visible
-    // and the hand-off to the home page is seamless — no white flash.
+    // finish before routing). The native Android logo splash is still on screen
+    // on top of this (see main()), so this navy filler only matches its
+    // background — the user just sees the Android logo splash.
     if (!authProvider.isInitialized) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: BrandedSplash(),
+        home: Scaffold(backgroundColor: Color(0xFF1F5593)),
       );
     }
 
@@ -198,6 +211,10 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
       // otherwise. See DeferredDeepLinkHandler.
       DeferredDeepLinkHandler.instance.checkAndRoute(_router!);
     }
+
+    // Destination is ready — lift the Android logo splash after this frame so
+    // the user goes straight from the logo splash to Home / the product page.
+    _removeNativeSplashAfterFrame();
 
     return MaterialApp.router(
       title: 'Arasan Mobiles',

@@ -56,11 +56,11 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/logo_round.png"
 
 # Branded native launch/splash: the Arasan peacock on the logo's navy-blue
-# background, shown immediately on cold start (dark mode + the Android 12+ splash
-# API) so the LOGO is visible from the very first frame. Flutter's BrandedSplash
-# (lib/features/splash/widgets/branded_splash.dart) renders the SAME centred logo
-# on the SAME navy, so the OS→Flutter hand-off is seamless — the user sees one
-# continuous logo splash, then the home page. Regenerate after edits with:
+# background. This is the ONLY splash — there is no separate Flutter splash. The
+# native (Android) logo splash is kept on screen until the destination page is
+# laid out (see lib/app.dart → _removeNativeSplashAfterFrame), so the user goes
+# straight from the Android logo splash to Home (normal launch) or the product
+# page (deep link). Regenerate after edits with:
 #   dart run flutter_native_splash:create
 flutter_native_splash:
   color: "#1F5593"
