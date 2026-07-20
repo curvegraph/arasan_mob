@@ -269,9 +269,11 @@ class _AppBootstrapState extends State<_AppBootstrap> {
 
   @override
   Widget build(BuildContext context) {
-    // Startup done — hand off to the real app and reveal it (drop the splash).
+    // Network startup done — hand off to the real app. Keep the native splash
+    // on screen: ArasanUserApp lifts it only after auth is initialized and the
+    // home page is laid out, so there's no intermediate blank/white screen
+    // between the logo splash and the home page.
     if (_activityProvider != null && _searchProvider != null) {
-      _removeNativeSplashAfterFrame();
       return MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AuthProvider()),
