@@ -56,10 +56,11 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/logo_round.png"
 
 # Branded native launch/splash: the Arasan peacock on the logo's navy-blue
-# background, shown on every device (dark mode + the Android 12+ splash API)
-# so cold start no longer flashes a blank/black screen. The Flutter-side
-# _BootScreen renders the same logo + "Arasan Mobiles" on the same navy so the
-# hand-off is seamless. Regenerate after edits with:
+# background, shown immediately on cold start (dark mode + the Android 12+ splash
+# API) so the LOGO is visible from the very first frame. Flutter's BrandedSplash
+# (lib/features/splash/widgets/branded_splash.dart) renders the SAME centred logo
+# on the SAME navy, so the OS→Flutter hand-off is seamless — the user sees one
+# continuous logo splash, then the home page. Regenerate after edits with:
 #   dart run flutter_native_splash:create
 flutter_native_splash:
   color: "#1F5593"

@@ -10,6 +10,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'app.dart';
+import 'features/splash/widgets/branded_splash.dart';
 import 'core/config/firebase_availability.dart';
 import 'core/config/supabase_config.dart';
 import 'firebase_options.dart';
@@ -190,6 +191,16 @@ class _AppBootstrapState extends State<_AppBootstrap> {
   @override
   void initState() {
     super.initState();
+    // Drop the native OS splash as soon as Flutter has painted its first frame
+    // (our BrandedSplash — same navy + same centred logo). This is what makes
+    // the logo appear on EVERY launch path: on a normal home-icon launch the OS
+    // splash already shows the logo and Flutter continues it seamlessly; on a
+    // deep-link launch (e.g. a product tapped in WhatsApp) the OS splash shows
+    // only the navy background — Vivo/Oppo skip the icon for VIEW intents — so
+    // the Flutter logo is the ONLY way the logo shows there.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
     _boot();
   }
 
@@ -254,25 +265,9 @@ class _AppBootstrapState extends State<_AppBootstrap> {
     _retryTimer = Timer(Duration(seconds: secs), _boot);
   }
 
-  bool _splashRemoved = false;
-
-  /// Lift the native splash once, after the frame that first shows real
-  /// content (the homepage, or the offline retry screen) has been laid out —
-  /// so there's no flash of an empty screen between splash and content.
-  void _removeNativeSplashAfterFrame() {
-    if (_splashRemoved) return;
-    _splashRemoved = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FlutterNativeSplash.remove();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Network startup done — hand off to the real app. Keep the native splash
-    // on screen: ArasanUserApp lifts it only after auth is initialized and the
-    // home page is laid out, so there's no intermediate blank/white screen
-    // between the logo splash and the home page.
+    // Network startup done — hand off to the real app.
     if (_activityProvider != null && _searchProvider != null) {
       return MultiProvider(
         providers: [
@@ -303,19 +298,18 @@ class _AppBootstrapState extends State<_AppBootstrap> {
     // First attempt failed (offline) — reveal the retry-able "no connection"
     // screen (which self-heals when the network returns).
     if (_error != null) {
-      _removeNativeSplashAfterFrame();
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         home: _BootScreen(error: _error, onRetry: _boot),
       );
     }
 
-    // Still starting up for the first time: keep the native splash on screen
-    // (it sits on top of this) so the user just sees the logo splash. This
-    // navy filler only matters for the split second before/after the splash.
+    // Still starting up for the first time — show the Flutter branded splash
+    // (the same centred logo on the same navy as the OS splash) so the logo is
+    // visible while backend/Supabase init runs, on every launch path.
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Scaffold(backgroundColor: Color(0xFF1F5593)),
+      home: BrandedSplash(),
     );
   }
 }

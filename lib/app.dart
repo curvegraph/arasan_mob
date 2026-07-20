@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'features/splash/widgets/branded_splash.dart';
 import 'core/theme/app_theme.dart';
 import 'core/routing/app_router.dart';
 import 'core/routing/deep_link_handler.dart';
@@ -88,18 +88,6 @@ class _OfflineScreen extends StatelessWidget {
 class _ArasanUserAppState extends State<ArasanUserApp> {
   GoRouter? _router;
   bool _wishlistLoaded = false;
-  bool _splashRemoved = false;
-
-  /// Lift the native launch splash only once the real app (auth initialized +
-  /// router built) has been laid out, so the user goes straight from the logo
-  /// splash to the home page — no intermediate blank/white screen.
-  void _removeNativeSplashAfterFrame() {
-    if (_splashRemoved) return;
-    _splashRemoved = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FlutterNativeSplash.remove();
-    });
-  }
 
   // Global messenger so the connectivity watcher can post snackbars from
   // outside any page's Scaffold.
@@ -164,14 +152,13 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
     final authProvider = context.watch<AuthProvider>();
 
     // Wait for auth to initialize before showing the app (auto-login must
-    // finish before routing). The native launch splash is still on screen at
-    // this point (see below), so this navy filler only shows for the split
-    // second before/after it — matching the splash's #1F5593 so there's no
-    // white flash if it's ever seen.
+    // finish before routing). Keep the branded splash (logo + shop name on the
+    // launch navy) on screen during this brief init so the logo stays visible
+    // and the hand-off to the home page is seamless — no white flash.
     if (!authProvider.isInitialized) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(backgroundColor: Color(0xFF1F5593)),
+        home: BrandedSplash(),
       );
     }
 
@@ -211,9 +198,6 @@ class _ArasanUserAppState extends State<ArasanUserApp> {
       // otherwise. See DeferredDeepLinkHandler.
       DeferredDeepLinkHandler.instance.checkAndRoute(_router!);
     }
-
-    // Home is ready — reveal it by dropping the native splash after this frame.
-    _removeNativeSplashAfterFrame();
 
     return MaterialApp.router(
       title: 'Arasan Mobiles',
